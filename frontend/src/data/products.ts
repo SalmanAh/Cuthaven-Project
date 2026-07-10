@@ -1,0 +1,156 @@
+export interface Product {
+  id: string;
+  slug: string;
+  name: string;
+  shortDescription: string;
+  description?: string;
+  price: number;
+  salePrice: number | null;
+  category: string;
+  images: string[];
+  inStock: boolean;
+  rating: number;
+  reviewCount: number;
+  sku: string;
+  brand: string;
+  attributes: Record<string, string>;
+  tags: string[];
+}
+
+export const products: Product[] = [
+  {
+    id: "1",
+    slug: "garden-planting-tools-3-piece-set",
+    name: "LMcenter's Garden Planting Tools Family Set 3-Piece Aluminum Alloy",
+    shortDescription: "Professional 3-piece aluminum alloy garden tool set for home and outdoor use.",
+    description: "Make gardening effortless with this premium 3-piece aluminum alloy garden planting tools set. Built for durability and comfort, ideal for both beginners and experienced gardeners. High-quality aluminum alloy blade, comfortable PVC handle grip, rust-resistant coating, suitable for all soil types.",
+    price: 290, salePrice: null, category: "Garden Tools",
+    images: ["https://placehold.co/800x800/2D6A4F/FAFAF7?text=Garden+Tools+Set", "https://placehold.co/800x800/1B4332/FAFAF7?text=Detail+View"],
+    inStock: true, rating: 4.5, reviewCount: 12, sku: "LMC-GPT-001", brand: "LMcenter",
+    attributes: { "Handle Material": "PVC Plastic", "Blade Material": "Aluminum Alloy", "Pieces": "3" },
+    tags: ["garden", "outdoor", "tools", "aluminum"],
+  },
+  {
+    id: "2", slug: "composite-steel-sickle-weeding-tool",
+    name: "LMcenter's Composite Steel Bent Handlebar Sickle Hand Weeding Tool",
+    shortDescription: "Durable composite steel sickle for efficient garden weeding and harvesting.",
+    description: "Reliable sickle for efficient gardening, harvesting, and landscaping tasks. The bent handlebar design reduces wrist strain during extended use.",
+    price: 25, salePrice: null, category: "Garden Tools",
+    images: ["https://placehold.co/800x800/2D6A4F/FAFAF7?text=Steel+Sickle"],
+    inStock: true, rating: 4.3, reviewCount: 8, sku: "LMC-CSS-002", brand: "LMcenter",
+    attributes: { "Handle Material": "Wood", "Blade Material": "Composite Steel" },
+    tags: ["sickle", "weeding", "garden"],
+  },
+  {
+    id: "3", slug: "2-in-1-snap-spring-ring-circlip-plier",
+    name: "LMcenter's 2-In-1 DIY Snap Spring Ring Circlip Removal Install Plier",
+    shortDescription: "Versatile 2-in-1 plier for snap ring and circlip removal and installation.",
+    description: "Professional-grade snap ring plier combining removal and installation functions in one tool. Ideal for automotive, mechanical, and DIY applications.",
+    price: 70, salePrice: null, category: "Hand Tools",
+    images: ["https://placehold.co/800x800/1B4332/FAFAF7?text=Circlip+Plier"],
+    inStock: true, rating: 4.6, reviewCount: 5, sku: "LMC-CRP-003", brand: "LMcenter",
+    attributes: { "Type": "Plier", "Material": "Alloy Steel", "Function": "2-in-1" },
+    tags: ["plier", "circlip", "hand tools"],
+  },
+  {
+    id: "4", slug: "12-piece-ratchet-socket-wrench-set",
+    name: "LMcenter's 12-Piece Ratchet Socket Wrench Set – Alloy Steel Repair Kit",
+    shortDescription: "Complete 12-piece alloy steel ratchet socket wrench kit for all repair needs.",
+    description: "A complete ratchet socket wrench set engineered for professional repair work. The 12-piece alloy steel construction provides strength and precision.",
+    price: 60, salePrice: null, category: "Hand Tools",
+    images: ["https://placehold.co/800x800/1B4332/FAFAF7?text=Wrench+Set"],
+    inStock: true, rating: 4.7, reviewCount: 19, sku: "LMC-RSW-004", brand: "LMcenter",
+    attributes: { "Pieces": "12", "Material": "Alloy Steel", "Type": "Ratchet Socket" },
+    tags: ["wrench", "ratchet", "repair"],
+  },
+  {
+    id: "5", slug: "heavy-duty-pruning-shears",
+    name: "LMcenter's Heavy Duty Bypass Pruning Shears Garden Scissors",
+    shortDescription: "Sharp bypass pruning shears for clean, precise garden cuts.",
+    description: "Bypass pruning shears with stainless steel blades and an ergonomic non-slip grip. Perfect for trimming branches up to 20mm thick.",
+    price: 35, salePrice: 28, category: "Garden Tools",
+    images: ["https://placehold.co/800x800/52B788/FAFAF7?text=Pruning+Shears"],
+    inStock: true, rating: 4.4, reviewCount: 23, sku: "LMC-PS-005", brand: "LMcenter",
+    attributes: { "Material": "Stainless Steel", "Handle": "Ergonomic Grip" },
+    tags: ["pruning", "scissors", "garden"],
+  },
+  {
+    id: "6", slug: "adjustable-garden-hoe",
+    name: "LMcenter's Adjustable Long Handle Garden Hoe Weeding Tool",
+    shortDescription: "Adjustable handle garden hoe for comfortable weeding at any height.",
+    description: "Adjustable aluminum handle extends from 90cm to 150cm. Steel head is heat-treated for edge retention.",
+    price: 45, salePrice: null, category: "Garden Tools",
+    images: ["https://placehold.co/800x800/2D6A4F/FAFAF7?text=Garden+Hoe"],
+    inStock: true, rating: 4.2, reviewCount: 7, sku: "LMC-GH-006", brand: "LMcenter",
+    attributes: { "Handle": "Adjustable Aluminum", "Head": "Steel" },
+    tags: ["hoe", "weeding", "garden"],
+  },
+  {
+    id: "7", slug: "combination-spanner-set-8-piece",
+    name: "LMcenter's 8-Piece Combination Spanner Set Chrome Vanadium Steel",
+    shortDescription: "Chrome vanadium steel combination spanners for professional use.",
+    description: "Set of 8 metric combination spanners (8-19mm) forged from chrome vanadium steel with a satin chrome finish.",
+    price: 48, salePrice: null, category: "Hand Tools",
+    images: ["https://placehold.co/800x800/1B4332/FAFAF7?text=Spanner+Set"],
+    inStock: true, rating: 4.5, reviewCount: 14, sku: "LMC-CS-007", brand: "LMcenter",
+    attributes: { "Pieces": "8", "Material": "Chrome Vanadium Steel" },
+    tags: ["spanner", "wrench"],
+  },
+  {
+    id: "8", slug: "telescopic-tree-pruner",
+    name: "LMcenter's Telescopic Tree Pruner Branch Cutter Extendable Pole Saw",
+    shortDescription: "Extendable telescopic pruner for high-branch trimming without a ladder.",
+    description: "Reaches up to 3.6m with a hardened SK5 steel blade. Includes both a bypass pruner head and a folding saw blade.",
+    price: 85, salePrice: 72, category: "Garden Tools",
+    images: ["https://placehold.co/800x800/52B788/FAFAF7?text=Tree+Pruner"],
+    inStock: true, rating: 4.3, reviewCount: 11, sku: "LMC-TP-008", brand: "LMcenter",
+    attributes: { "Reach": "Up to 3.6m", "Blade": "SK5 Steel" },
+    tags: ["pruner", "tree", "telescopic"],
+  },
+  {
+    id: "9", slug: "cordless-drill-driver-20v",
+    name: "LMcenter's 20V Cordless Drill Driver Kit with 2 Batteries",
+    shortDescription: "Powerful 20V cordless drill with lithium-ion batteries and charger.",
+    description: "20V brushless motor delivers up to 500 in-lbs of torque. Kit includes two 2.0Ah batteries and fast charger.",
+    price: 149, salePrice: 129, category: "Power Tools",
+    images: ["https://placehold.co/800x800/E07B1A/FAFAF7?text=Cordless+Drill"],
+    inStock: true, rating: 4.8, reviewCount: 34, sku: "LMC-CD-009", brand: "LMcenter",
+    attributes: { "Voltage": "20V", "Chuck Size": "13mm", "Batteries": "2 x 2.0Ah" },
+    tags: ["drill", "cordless", "power tools"],
+  },
+  {
+    id: "10", slug: "heavy-duty-storage-toolbox",
+    name: "LMcenter's Heavy Duty 22-inch Portable Storage Toolbox",
+    shortDescription: "Rugged toolbox with removable tray and secure latches.",
+    description: "Impact-resistant polymer construction with reinforced metal latches and a padlock loop.",
+    price: 39, salePrice: null, category: "Storage & Organization",
+    images: ["https://placehold.co/800x800/1B4332/FAFAF7?text=Toolbox"],
+    inStock: true, rating: 4.4, reviewCount: 9, sku: "LMC-TB-010", brand: "LMcenter",
+    attributes: { "Size": "22 inch", "Material": "Polymer" },
+    tags: ["toolbox", "storage"],
+  },
+  {
+    id: "11", slug: "outdoor-work-gloves-leather",
+    name: "LMcenter's Premium Leather Outdoor Work Gloves",
+    shortDescription: "Durable leather gloves for landscaping and heavy outdoor work.",
+    description: "Full-grain cowhide leather with reinforced palm and elastic wrist for a secure fit.",
+    price: 22, salePrice: null, category: "Outdoor Accessories",
+    images: ["https://placehold.co/800x800/E07B1A/FAFAF7?text=Work+Gloves"],
+    inStock: false, rating: 4.6, reviewCount: 41, sku: "LMC-WG-011", brand: "LMcenter",
+    attributes: { "Material": "Leather", "Size": "L" },
+    tags: ["gloves", "leather"],
+  },
+  {
+    id: "12", slug: "wall-mounted-tool-organizer",
+    name: "LMcenter's Wall Mounted Pegboard Tool Organizer Kit",
+    shortDescription: "Complete pegboard system for organizing your workshop.",
+    description: "Metal pegboard with 30 assorted hooks. Powder-coated finish resists rust and scratches.",
+    price: 79, salePrice: null, category: "Storage & Organization",
+    images: ["https://placehold.co/800x800/2D6A4F/FAFAF7?text=Pegboard"],
+    inStock: true, rating: 4.5, reviewCount: 17, sku: "LMC-PB-012", brand: "LMcenter",
+    attributes: { "Hooks": "30", "Material": "Steel" },
+    tags: ["organizer", "storage", "pegboard"],
+  },
+];
+
+export const getProductBySlug = (slug: string) => products.find((p) => p.slug === slug);

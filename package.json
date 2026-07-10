@@ -1,0 +1,12 @@
+{
+  "name": "cuthaven",
+  "private": true,
+  "version": "0.1.0",
+  "scripts": {
+    "dev": "concurrently -n frontend,backend -c green,cyan \"cd frontend && bun dev\" \"cd backend && npm run dev\"",
+    "install:all": "cd frontend && bun install && cd ../backend && npm install"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.0"
+  }
+}
