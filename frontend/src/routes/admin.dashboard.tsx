@@ -16,6 +16,8 @@ import { categories as seedCats, type Category } from "@/data/categories";
 import { customers } from "@/data/customers";
 import { storeManagers as seedSMs, type StoreManager } from "@/data/store-managers";
 import { periodStats, revenueSeries, statusDistribution, type Period } from "@/data/analytics";
+import { RequireAuth } from "@/components/auth/RequireAuth";
+import { useAuth } from "@/context/AuthContext";
 
 type Tab = "overview" | "orders" | "products" | "categories" | "customers" | "managers" | "settings";
 
@@ -33,6 +35,13 @@ export const Route = createFileRoute("/admin/dashboard")({
 function AdminDashboard() {
   const [tab, setTab] = useState<Tab>("overview");
   const nav = useNavigate();
+  const { logout } = useAuth();
+
+  const handleLogout = async () => {
+    await logout();
+    nav({ to: "/account/login" });
+  };
+
   const items: NavItem[] = [
     { key: "overview", label: "Overview", icon: LayoutDashboard },
     { key: "orders", label: "Orders", icon: Package },
@@ -41,19 +50,21 @@ function AdminDashboard() {
     { key: "customers", label: "Customers", icon: Users },
     { key: "managers", label: "Store Managers", icon: UserCog },
     { key: "settings", label: "Settings", icon: Settings },
-    { key: "logout", label: "Logout", icon: LogOut, onClick: () => nav({ to: "/account/login" }) },
+    { key: "logout", label: "Logout", icon: LogOut, onClick: handleLogout },
   ];
   const titles: Record<Tab, string> = { overview: "Admin Overview", orders: "Orders", products: "Products", categories: "Categories", customers: "Customers", managers: "Store Managers", settings: "Settings" };
   return (
-    <DashboardShell title={titles[tab]} sidebarTitle="Admin" nav={items} activeKey={tab} onSelect={(k) => setTab(k as Tab)}>
-      {tab === "overview" && <Overview />}
-      {tab === "orders" && <OrdersPage />}
-      {tab === "products" && <ProductsPage />}
-      {tab === "categories" && <CategoriesPage />}
-      {tab === "customers" && <CustomersPage />}
-      {tab === "managers" && <ManagersPage />}
-      {tab === "settings" && <SettingsPage />}
-    </DashboardShell>
+    <RequireAuth roles={["admin"]}>
+      <DashboardShell title={titles[tab]} sidebarTitle="Admin" nav={items} activeKey={tab} onSelect={(k) => setTab(k as Tab)}>
+        {tab === "overview" && <Overview />}
+        {tab === "orders" && <OrdersPage />}
+        {tab === "products" && <ProductsPage />}
+        {tab === "categories" && <CategoriesPage />}
+        {tab === "customers" && <CustomersPage />}
+        {tab === "managers" && <ManagersPage />}
+        {tab === "settings" && <SettingsPage />}
+      </DashboardShell>
+    </RequireAuth>
   );
 }
 

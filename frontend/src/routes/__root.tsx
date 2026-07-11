@@ -8,6 +8,7 @@ import { Toaster } from "@/components/ui/sonner";
 
 import appCss from "../styles.css?url";
 import { reportLovableError } from "../lib/lovable-error-reporting";
+import { AuthProvider } from "@/context/AuthContext";
 import { CartProvider } from "@/context/CartContext";
 import { WishlistProvider } from "@/context/WishlistContext";
 import { CartUIProvider } from "@/context/CartUIContext";
@@ -91,20 +92,22 @@ function RootComponent() {
   const { queryClient } = Route.useRouteContext();
   return (
     <QueryClientProvider client={queryClient}>
-      <UIProvider>
-        <WishlistProvider>
-          <CartProvider>
-            <CartUIProvider>
-              <AppLayout>
-                <Outlet />
-              </AppLayout>
-              <CartDrawer />
-              <CookieRoot />
-              <Toaster position="top-right" richColors />
-            </CartUIProvider>
-          </CartProvider>
-        </WishlistProvider>
-      </UIProvider>
+      <AuthProvider>
+        <UIProvider>
+          <WishlistProvider>
+            <CartProvider>
+              <CartUIProvider>
+                <AppLayout>
+                  <Outlet />
+                </AppLayout>
+                <CartDrawer />
+                <CookieRoot />
+                <Toaster position="top-right" richColors />
+              </CartUIProvider>
+            </CartProvider>
+          </WishlistProvider>
+        </UIProvider>
+      </AuthProvider>
     </QueryClientProvider>
   );
 }

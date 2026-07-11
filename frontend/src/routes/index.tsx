@@ -1,8 +1,8 @@
 import { Link, createFileRoute } from "@tanstack/react-router";
 import { ArrowRight, Star, Truck, RotateCcw, ShieldCheck, ShoppingCart } from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
 import { ProductCard } from "@/components/ui/ProductCard";
-import { products } from "@/data/products";
-import { categories } from "@/data/categories";
+import { getProducts, getCategories } from "@/lib/api-client";
 import heroTool from "@/assets/hero-tool.png.asset.json";
 import { useState } from "react";
 
@@ -44,6 +44,9 @@ const heroTiles = [
 ];
 
 function HomePage() {
+  const { data: products = [] } = useQuery({ queryKey: ["products"], queryFn: getProducts });
+  const { data: categories = [] } = useQuery({ queryKey: ["categories"], queryFn: getCategories });
+
   const bestSellers = [...products].sort((a, b) => b.rating - a.rating).slice(0, 8);
   const promoTiles = categories.slice(0, 4);
 
@@ -222,20 +225,12 @@ function HomePage() {
               }`}
             >
               {i !== 3 && (
-                <>
-                  <img
-                    src={c.image}
-                    alt={c.name}
-                    loading="lazy"
-                    className="absolute inset-0 h-full w-full object-cover transition-transform duration-700 group-hover:scale-110"
-                  />
-                  <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/25 to-transparent" />
-                </>
+                <div className="absolute inset-0 bg-gradient-to-br from-primary/80 to-primary-dark" />
               )}
               <div className="relative p-5 h-full flex flex-col justify-end text-white">
                 <h3 className="font-display text-xl md:text-2xl font-bold leading-tight">{c.name}</h3>
                 <p className="mt-1 text-xs uppercase tracking-widest text-white/80 inline-flex items-center gap-1">
-                  Shop <ArrowRight className="h-3 w-3" />
+                  {c.productCount} products <ArrowRight className="h-3 w-3" />
                 </p>
               </div>
             </Link>

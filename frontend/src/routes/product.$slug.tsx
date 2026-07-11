@@ -1,95 +1,171 @@
 import { createFileRoute, Link, notFound } from "@tanstack/react-router";
 import { useState } from "react";
-import { Heart, Minus, Plus, ShoppingCart, Truck, RotateCcw, Lock, Share2, Star } from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
+import { Heart, Minus, Plus, ShoppingCart, Truck, RotateCcw, Lock, Share2, Star, Package } from "lucide-react";
 import { PageHero } from "@/components/ui/PageHero";
-import { PageBreadcrumb } from "@/components/ui/PageBreadcrumb";
 import { ProductCard } from "@/components/ui/ProductCard";
-import { getProductBySlug, products } from "@/data/products";
+import { getProductBySlug, getProducts } from "@/lib/api-client";
 import { useCart } from "@/context/CartContext";
 import { useWishlist } from "@/context/WishlistContext";
+import type { Product } from "@/data/products";
 
 export const Route = createFileRoute("/product/$slug")({
-  head: ({ params }) => {
-    const p = getProductBySlug(params.slug);
-    return {
-      meta: [
-        { title: p ? `${p.name} — CutHaven` : "Product — CutHaven" },
-        { name: "description", content: p?.shortDescription ?? "Premium tools at CutHaven." },
-        { property: "og:title", content: p?.name ?? "CutHaven Product" },
-        { property: "og:description", content: p?.shortDescription ?? "" },
-        ...(p?.images[0] ? [{ property: "og:image", content: p.images[0] }] : []),
-      ],
-    };
-  },
-  loader: ({ params }) => {
-    const product = getProductBySlug(params.slug);
-    if (!product) throw notFound();
-    return { product };
-  },
+  head: ({ params }) => ({
+    meta: [
+      { title: `${params.slug.replace(/-/g, " ")} — CutHaven` },
+      { name: "description", content: "Premium tools at CutHaven." },
+    ],
+  }),
   component: ProductPage,
 });
 
 function ProductPage() {
-  const { product } = Route.useLoaderData();
+  const { slug } = Route.useParams();
   const [imgIdx, setImgIdx] = useState(0);
   const [qty, setQty] = useState(1);
   const [tab, setTab] = useState<"desc" | "specs" | "reviews">("desc");
   const { addItem } = useCart();
   const { toggle, has } = useWishlist();
 
+  const { data: product, isLoading, isError } = useQuery({
+    queryKey: ["product", slug],
+    queryFn: () => getProductBySlug(slug),
+  });
+
+  const { data: allProducts = [] } = useQuery({
+    queryKey: ["products"],
+    queryFn: getProducts,
+  });
+
+  if (isLoading) {
+    return (
+      <div className="flex min-h-[60vh] items-center justify-center">
+        <div className="h-8 w-8 rounded-full border-4 border-primary border-t-transparent animate-spin" />
+      </div>
+    );
+  }
+
+  if (isError || !product) {
+    return (
+      <div className="flex min-h-[60vh] flex-col items-center justify-center gap-4 px-4 text-center">
+        <Package className="h-14 w-14 text-text-secondary" />
+        <h1 className="font-display text-2xl font-bold">Product not found</h1>
+        <p className="text-text-secondary">This product doesn't exist or has been removed.</p>
+        <Link to="/shop" className="btn-primary">Back to Shop</Link>
+      </div>
+    );
+  }
+
   const price = product.salePrice ?? product.price;
-  const related = products.filter((p) => p.category === product.category && p.id !== product.id).slice(0, 4);
+  const related = allProducts
+    .filter((p) => p.category === product.category && p.id !== product.id)
+    .slice(0, 4);
 
   return (
     <div>
-      <PageHero title={product.name} crumbs={[{ label: "Shop", to: "/shop" }, { label: product.category }, { label: "Detail" }]} />
+      <PageHero
+        title={product.name}
+        crumbs={[{ label: "Shop", to: "/shop" }, { label: product.category || "Product" }, { label: "Detail" }]}
+      />
 
       <div className="mx-auto max-w-7xl px-4 py-10">
         <div className="grid lg:grid-cols-2 gap-10">
+          {/* ── Images ── */}
           <div>
             <div className="aspect-square rounded-2xl overflow-hidden bg-muted mb-4">
-              <img src={product.images[imgIdx]} alt={product.name} className="w-full h-full object-cover" />
+              <img
+                src={product.images[imgIdx] ?? product.images[0]}
+                alt={product.name}
+                className="w-full h-full object-cover"
+              />
             </div>
-            <div className="flex gap-3">
-              {product.images.map((img: string, i: number) => (
-                <button key={i} onClick={() => setImgIdx(i)}
-                  className={`h-20 w-20 rounded-lg overflow-hidden border-2 ${i === imgIdx ? "border-primary" : "border-border"}`}>
-                  <img src={img} alt="" className="w-full h-full object-cover" />
-                </button>
-              ))}
-            </div>
+            {product.images.length > 1 && (
+              <div className="flex gap-3 flex-wrap">
+                {product.images.map((img, i) => (
+                  <button
+                    key={i}
+                    onClick={() => setImgIdx(i)}
+                    className={`h-20 w-20 rounded-lg overflow-hidden border-2 shrink-0 ${i === imgIdx ? "border-primary" : "border-border"}`}
+                  >
+                    <img src={img} alt="" className="w-full h-full object-cover" />
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
 
+          {/* ── Info ── */}
           <div>
-            <p className="text-xs uppercase tracking-widest text-text-secondary">SKU: {product.sku} · {product.category}</p>
+            <p className="text-xs uppercase tracking-widest text-text-secondary">
+              {product.brand && <span>{product.brand} · </span>}
+              {product.category || "Product"}
+            </p>
             <h1 className="font-display text-3xl md:text-4xl font-bold mt-2">{product.name}</h1>
+
             <div className="flex items-center gap-2 mt-3 text-sm">
               <div className="flex text-warning">
-                {[...Array(5)].map((_, i) => <Star key={i} className={`h-4 w-4 ${i < Math.round(product.rating) ? "fill-current" : ""}`} />)}
+                {[...Array(5)].map((_, i) => (
+                  <Star key={i} className={`h-4 w-4 ${i < Math.round(product.rating) ? "fill-current" : ""}`} />
+                ))}
               </div>
-              <span className="text-text-secondary">{product.rating} ({product.reviewCount} reviews)</span>
+              <span className="text-text-secondary">
+                {product.rating > 0 ? `${product.rating} (${product.reviewCount} reviews)` : "No reviews yet"}
+              </span>
             </div>
 
             <div className="flex items-baseline gap-3 mt-5">
               <span className="text-accent text-3xl font-bold">${price.toFixed(2)}</span>
-              {product.salePrice && <span className="text-text-muted line-through">${product.price.toFixed(2)}</span>}
+              {product.salePrice && (
+                <span className="text-text-muted line-through">${product.price.toFixed(2)}</span>
+              )}
             </div>
             <p className="text-sm text-success mt-1">Free shipping on orders over $350</p>
 
-            <p className="mt-6 text-text-secondary leading-relaxed">{product.shortDescription}</p>
+            <p className="mt-6 text-text-secondary leading-relaxed">
+              {product.shortDescription}
+            </p>
 
             <div className="mt-6 flex items-center gap-4">
               <div className="flex items-center border border-border rounded-full">
-                <button onClick={() => setQty((q) => Math.max(1, q - 1))} className="h-11 w-11 grid place-items-center" aria-label="Decrease"><Minus className="h-4 w-4" /></button>
+                <button
+                  onClick={() => setQty((q) => Math.max(1, q - 1))}
+                  className="h-11 w-11 grid place-items-center"
+                  aria-label="Decrease"
+                >
+                  <Minus className="h-4 w-4" />
+                </button>
                 <span className="w-10 text-center font-semibold">{qty}</span>
-                <button onClick={() => setQty((q) => q + 1)} className="h-11 w-11 grid place-items-center" aria-label="Increase"><Plus className="h-4 w-4" /></button>
+                <button
+                  onClick={() => setQty((q) => q + 1)}
+                  className="h-11 w-11 grid place-items-center"
+                  aria-label="Increase"
+                >
+                  <Plus className="h-4 w-4" />
+                </button>
               </div>
-              <button onClick={() => addItem(product, qty)} className="btn-primary flex-1"><ShoppingCart className="h-4 w-4" /> Add to Cart</button>
+              <button
+                disabled={!product.inStock}
+                onClick={() => addItem(product, qty)}
+                className="btn-primary flex-1 disabled:opacity-50"
+              >
+                <ShoppingCart className="h-4 w-4" />
+                {product.inStock ? "Add to Cart" : "Out of Stock"}
+              </button>
             </div>
 
             <div className="mt-3 flex gap-3">
-              <Link to="/cart" onClick={() => addItem(product, qty)} className="btn-outline-primary flex-1">Buy Now</Link>
-              <button onClick={() => toggle(product.id)} className={`h-11 w-11 rounded-full border border-border grid place-items-center hover:border-primary ${has(product.id) ? "text-destructive" : ""}`} aria-label="Wishlist">
+              <Link
+                to="/cart"
+                onClick={() => product.inStock && addItem(product, qty)}
+                className="btn-outline-primary flex-1"
+              >
+                Buy Now
+              </Link>
+              <button
+                onClick={() => toggle(product.id)}
+                className={`h-11 w-11 rounded-full border border-border grid place-items-center hover:border-primary transition ${has(product.id) ? "text-destructive" : ""}`}
+                aria-label="Wishlist"
+              >
                 <Heart className={`h-4 w-4 ${has(product.id) ? "fill-current" : ""}`} />
               </button>
             </div>
@@ -106,55 +182,56 @@ function ProductPage() {
           </div>
         </div>
 
+        {/* ── Tabs ── */}
         <div className="mt-14">
           <div className="flex gap-1 border-b border-border">
             {(["desc", "specs", "reviews"] as const).map((t) => (
-              <button key={t} onClick={() => setTab(t)}
-                className={`px-5 py-3 text-sm font-semibold border-b-2 transition ${tab === t ? "border-accent text-primary" : "border-transparent text-text-secondary hover:text-foreground"}`}>
-                {t === "desc" ? "Description" : t === "specs" ? "Specifications" : `Reviews (${product.reviewCount})`}
+              <button
+                key={t}
+                onClick={() => setTab(t)}
+                className={`px-5 py-3 text-sm font-semibold border-b-2 transition ${tab === t ? "border-accent text-primary" : "border-transparent text-text-secondary hover:text-foreground"}`}
+              >
+                {t === "desc" ? "Description" : t === "specs" ? "Features" : `Reviews (${product.reviewCount})`}
               </button>
             ))}
           </div>
-          <div className="py-8 prose max-w-none">
-            {tab === "desc" && <p className="text-text-secondary leading-relaxed max-w-3xl">{product.description}</p>}
+          <div className="py-8 max-w-none">
+            {tab === "desc" && (
+              <p className="text-text-secondary leading-relaxed max-w-3xl whitespace-pre-line">
+                {product.description}
+              </p>
+            )}
             {tab === "specs" && (
-              <table className="w-full max-w-xl text-sm">
-                <tbody>
-                  {(Object.entries(product.attributes) as [string, string][]).map(([k, v]) => (
-                    <tr key={k} className="border-b border-border">
-                      <td className="py-3 font-semibold w-1/3">{k}</td>
-                      <td className="py-3 text-text-secondary">{v}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+              <ul className="space-y-2 max-w-xl">
+                {(product.tags ?? []).length > 0 ? (
+                  product.tags.map((f, i) => (
+                    <li key={i} className="flex gap-2 text-sm">
+                      <span className="text-primary mt-1">•</span>
+                      <span className="text-text-secondary">{f}</span>
+                    </li>
+                  ))
+                ) : (
+                  <li className="text-sm text-text-secondary">No specifications listed.</li>
+                )}
+              </ul>
             )}
             {tab === "reviews" && (
               <div className="space-y-5 max-w-2xl">
-                {[
-                  { name: "Marcus H.", rating: 5, comment: "Solid build, delivered fast. Exactly what I needed." },
-                  { name: "Priya S.", rating: 4, comment: "Great value. Handle grip is comfortable even after long use." },
-                  { name: "Ted W.", rating: 5, comment: "Used it for a full weekend project — no complaints." },
-                ].map((r, i) => (
-                  <div key={i} className="card-surface p-5">
-                    <div className="flex items-center gap-2 mb-2">
-                      <span className="font-semibold">{r.name}</span>
-                      <div className="flex text-warning">{[...Array(5)].map((_, j) => <Star key={j} className={`h-3.5 w-3.5 ${j < r.rating ? "fill-current" : ""}`} />)}</div>
-                    </div>
-                    <p className="text-sm text-text-secondary">{r.comment}</p>
-                  </div>
-                ))}
+                <p className="text-sm text-text-secondary">No reviews yet. Be the first!</p>
               </div>
             )}
           </div>
         </div>
 
-        <section className="mt-14">
-          <h2 className="font-display text-2xl font-bold mb-6">You May Also Like</h2>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-5">
-            {related.map((p) => <ProductCard key={p.id} product={p} />)}
-          </div>
-        </section>
+        {/* ── Related products ── */}
+        {related.length > 0 && (
+          <section className="mt-14">
+            <h2 className="font-display text-2xl font-bold mb-6">You May Also Like</h2>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-5">
+              {related.map((p) => <ProductCard key={p.id} product={p} />)}
+            </div>
+          </section>
+        )}
       </div>
     </div>
   );

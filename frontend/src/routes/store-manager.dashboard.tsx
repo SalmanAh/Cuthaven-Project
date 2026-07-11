@@ -10,6 +10,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { mockOrders, type Order, type OrderStatus } from "@/data/orders";
 import { products } from "@/data/products";
 import { periodStats, revenueSeries, type Period } from "@/data/analytics";
+import { RequireAuth } from "@/components/auth/RequireAuth";
+import { useAuth } from "@/context/AuthContext";
 
 type Tab = "overview" | "orders" | "products";
 
@@ -27,19 +29,28 @@ export const Route = createFileRoute("/store-manager/dashboard")({
 function StoreManagerDashboard() {
   const [tab, setTab] = useState<Tab>("overview");
   const nav = useNavigate();
+  const { logout } = useAuth();
+
+  const handleLogout = async () => {
+    await logout();
+    nav({ to: "/account/login" });
+  };
+
   const items: NavItem[] = [
     { key: "overview", label: "Overview", icon: LayoutDashboard },
     { key: "orders", label: "Orders", icon: Package },
     { key: "products", label: "Products", icon: Eye },
-    { key: "logout", label: "Logout", icon: LogOut, onClick: () => nav({ to: "/account/login" }) },
+    { key: "logout", label: "Logout", icon: LogOut, onClick: handleLogout },
   ];
   const titles: Record<Tab, string> = { overview: "Overview", orders: "Orders", products: "Products (view only)" };
   return (
-    <DashboardShell title={titles[tab]} sidebarTitle="Store Manager" nav={items} activeKey={tab} onSelect={(k) => setTab(k as Tab)}>
-      {tab === "overview" && <SMOverview />}
-      {tab === "orders" && <SMOrders />}
-      {tab === "products" && <SMProducts />}
-    </DashboardShell>
+    <RequireAuth roles={["store_manager"]}>
+      <DashboardShell title={titles[tab]} sidebarTitle="Store Manager" nav={items} activeKey={tab} onSelect={(k) => setTab(k as Tab)}>
+        {tab === "overview" && <SMOverview />}
+        {tab === "orders" && <SMOrders />}
+        {tab === "products" && <SMProducts />}
+      </DashboardShell>
+    </RequireAuth>
   );
 }
 

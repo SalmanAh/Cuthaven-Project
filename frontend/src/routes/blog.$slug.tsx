@@ -15,7 +15,7 @@ export const Route = createFileRoute("/blog/$slug")({
       ],
     };
   },
-  loader: ({ params }) => {
+  loader: ({ params }): { post: ReturnType<typeof getPostBySlug> & object } => {
     const post = getPostBySlug(params.slug);
     if (!post) throw notFound();
     return { post };

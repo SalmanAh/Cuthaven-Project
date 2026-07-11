@@ -1,6 +1,7 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { Leaf, ArrowLeft, CheckCircle2 } from "lucide-react";
 import { useState } from "react";
+import { useAuth } from "@/context/AuthContext";
 
 export const Route = createFileRoute("/account/forgot-password")({
   head: () => ({ meta: [
@@ -13,14 +14,26 @@ export const Route = createFileRoute("/account/forgot-password")({
 });
 
 function ForgotPasswordPage() {
+  const { forgotPassword } = useAuth();
   const [email, setEmail] = useState("");
   const [error, setError] = useState("");
   const [sent, setSent] = useState(false);
+  const [loading, setLoading] = useState(false);
 
-  const submit = (e: React.FormEvent) => {
+  const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!/^\S+@\S+\.\S+$/.test(email)) { setError("Please enter a valid email address"); return; }
-    setError(""); setSent(true);
+    setError("");
+    setLoading(true);
+    try {
+      await forgotPassword(email);
+      setSent(true);
+    } catch {
+      // Always show success — never reveal whether email exists
+      setSent(true);
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -48,7 +61,9 @@ function ForgotPasswordPage() {
                   className={`w-full px-3 py-2.5 rounded-lg border text-sm focus:outline-none ${error ? "border-destructive" : "border-border focus:border-primary"}`} />
                 {error && <p className="text-xs text-destructive mt-1">{error}</p>}
               </div>
-              <button type="submit" className="btn-primary w-full">Send Reset Link</button>
+              <button type="submit" className="btn-primary w-full" disabled={loading}>
+                {loading ? "Sending…" : "Send Reset Link"}
+              </button>
             </form>
             <p className="text-center text-sm mt-6"><Link to="/account/login" className="text-primary hover:underline">← Back to Sign In</Link></p>
           </>

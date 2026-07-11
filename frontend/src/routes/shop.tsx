@@ -4,8 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { LayoutGrid, List, X } from "lucide-react";
 import { PageHero } from "@/components/ui/PageHero";
 import { ProductCard } from "@/components/ui/ProductCard";
-import { getProducts } from "@/lib/api-client";
-import { categories } from "@/data/categories"; // TODO: swap to /api/categories once that endpoint exists
+import { getProducts, getCategories } from "@/lib/api-client";
 
 export const Route = createFileRoute("/shop")({
   head: () => ({
@@ -28,11 +27,14 @@ function ShopPage() {
   const [sort, setSort] = useState<Sort>("default");
   const [view, setView] = useState<"grid" | "list">("grid");
 
-  // Real backend call — this is the pattern every other route/data file
-  // in src/data/*.ts should follow next (see backend/README.md).
   const { data: products, isLoading, isError } = useQuery({
     queryKey: ["products"],
     queryFn: getProducts,
+  });
+
+  const { data: categories = [] } = useQuery({
+    queryKey: ["categories"],
+    queryFn: getCategories,
   });
 
   const filtered = useMemo(() => {
@@ -68,9 +70,9 @@ function ShopPage() {
             <div className="space-y-2">
               {categories.map((c) => (
                 <label key={c.id} className="flex items-center gap-2 text-sm cursor-pointer">
-                  <input type="checkbox" checked={selectedCats.includes(c.name)} onChange={() => toggleCat(c.name)} className="accent-primary" />
+                  <input type="checkbox" checked={selectedCats.includes(c.id)} onChange={() => toggleCat(c.id)} className="accent-primary" />
                   <span>{c.name}</span>
-                  <span className="text-text-muted text-xs ml-auto">({c.count})</span>
+                  <span className="text-text-muted text-xs ml-auto">({c.productCount})</span>
                 </label>
               ))}
             </div>

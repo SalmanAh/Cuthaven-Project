@@ -1,5 +1,6 @@
 # ── Documentation & DB files ──────────────────────────────────────────
 *.md
+!PROGRESS.md
 *.sql
 *.pdf
 *.docx
@@ -45,3 +46,7 @@ Thumbs.db
 
 # ── Lovable ───────────────────────────────────────────────────────────
 frontend/.lovable/
+
+
+
+*.csv
