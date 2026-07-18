@@ -1,5 +1,5 @@
 import { Link } from "@tanstack/react-router";
-import { Truck, RotateCcw, Headphones, ShieldCheck, Facebook, Instagram, Twitter, Linkedin, MapPin, Mail, Phone, Leaf } from "lucide-react";
+import { Truck, RotateCcw, Headphones, ShieldCheck, Facebook, Instagram, Twitter, Linkedin, MapPin, Mail, Phone, Leaf, CreditCard } from "lucide-react";
 import { useUI } from "@/context/UIContext";
 
 function CookiePrefsLink() {
@@ -100,10 +100,50 @@ export function Footer() {
         <div className="border-t border-white/10">
           <div className="mx-auto max-w-7xl px-4 py-5 flex flex-col md:flex-row justify-between items-center gap-3 text-xs text-white/60">
             <p>© 2025 CutHaven. All Rights Reserved. · <CookiePrefsLink /></p>
-            <div className="flex gap-2 items-center">
-              {["Visa", "Mastercard", "PayPal", "Amex", "Discover"].map((p) => (
-                <span key={p} className="px-2 py-1 rounded bg-white/10 border border-white/10">{p}</span>
-              ))}
+            <div className="flex gap-3 items-center flex-wrap justify-center">
+              {/* Visa */}
+              <div className="px-3 py-1.5 rounded bg-white flex items-center justify-center h-8 min-w-[50px]">
+                <span className="font-bold text-[#1A1F71] text-base tracking-tight">VISA</span>
+              </div>
+              
+              {/* Mastercard */}
+              <div className="px-3 py-1.5 rounded bg-white flex items-center justify-center h-8 min-w-[50px]">
+                <div className="flex items-center gap-0.5">
+                  <div className="w-4 h-4 rounded-full bg-[#EB001B]"></div>
+                  <div className="w-4 h-4 rounded-full bg-[#FF5F00] -ml-2"></div>
+                </div>
+              </div>
+              
+              {/* PayPal */}
+              <div className="px-3 py-1.5 rounded bg-white flex items-center justify-center h-8 min-w-[50px]">
+                <span className="font-bold text-[#003087] text-xs tracking-tight">Pay</span>
+                <span className="font-bold text-[#009CDE] text-xs tracking-tight">Pal</span>
+              </div>
+              
+              {/* Amex */}
+              <div className="px-3 py-1.5 rounded bg-[#006FCF] flex items-center justify-center h-8 min-w-[50px]">
+                <span className="font-bold text-white text-xs tracking-tight">AMEX</span>
+              </div>
+              
+              {/* Discover */}
+              <div className="px-3 py-1.5 rounded bg-white flex items-center justify-center h-8 min-w-[50px]">
+                <span className="font-bold text-[#FF6000] text-xs tracking-tight">DISCOVER</span>
+              </div>
+              
+              {/* Apple Pay */}
+              <div className="px-3 py-1.5 rounded bg-white flex items-center justify-center h-8 min-w-[50px]">
+                <span className="font-semibold text-black text-xs">Apple Pay</span>
+              </div>
+              
+              {/* Google Pay */}
+              <div className="px-3 py-1.5 rounded bg-white flex items-center justify-center h-8 min-w-[50px]">
+                <span className="font-medium text-[#5F6368] text-xs">G Pay</span>
+              </div>
+              
+              {/* Shop Pay */}
+              <div className="px-3 py-1.5 rounded bg-[#5A31F4] flex items-center justify-center h-8 min-w-[50px]">
+                <span className="font-bold text-white text-xs">Shop Pay</span>
+              </div>
             </div>
           </div>
         </div>

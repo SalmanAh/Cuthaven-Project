@@ -43,7 +43,7 @@ export async function requireAuth(req: Request, res: Response, next: NextFunctio
     req.user = {
       id: supabaseUser.id,
       email: supabaseUser.email ?? "",
-      role: staffRow.role as "admin" | "store_manager",
+      role: staffRow.role as "admin" | "store_manager" | "product_manager",
       firstName: staffRow.first_name,
       lastName: staffRow.last_name,
     };
@@ -112,7 +112,7 @@ export async function optionalAuth(req: Request, _res: Response, next: NextFunct
     req.user = {
       id: supabaseUser.id,
       email: supabaseUser.email ?? "",
-      role: staffRow.role as "admin" | "store_manager",
+      role: staffRow.role as "admin" | "store_manager" | "product_manager",
       firstName: staffRow.first_name,
       lastName: staffRow.last_name,
     };

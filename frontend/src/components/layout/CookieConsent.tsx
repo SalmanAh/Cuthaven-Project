@@ -3,15 +3,32 @@ import { Link } from "@tanstack/react-router";
 import { X, Cookie } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Switch } from "@/components/ui/switch";
+import { logConsent } from "@/lib/api-client";
 
 const KEY = "ch-cookie-consent";
+const POLICY_VERSION = "1.0";
+
+// Generate or retrieve a stable anonymous session ID for consent correlation
+function getSessionId(): string {
+  try {
+    let id = sessionStorage.getItem("ch-session-id");
+    if (!id) { id = crypto.randomUUID(); sessionStorage.setItem("ch-session-id", id); }
+    return id;
+  } catch { return "unknown"; }
+}
+
+// Detect Global Privacy Control signal (CCPA opt-out)
+function detectGPC(): boolean {
+  try { return !!(navigator as any).globalPrivacyControl; } catch { return false; }
+}
+
 interface Prefs { necessary: true; analytics: boolean; marketing: boolean; timestamp: number; }
 
 export function CookieConsent({ openSignal = 0 }: { openSignal?: number }) {
-  const [visible, setVisible] = useState(false);
-  const [customize, setCustomize] = useState(false);
-  const [analytics, setAnalytics] = useState(false);
-  const [marketing, setMarketing] = useState(false);
+  const [visible, setVisible]       = useState(false);
+  const [customize, setCustomize]   = useState(false);
+  const [analytics, setAnalytics]   = useState(false);
+  const [marketing, setMarketing]   = useState(false);
 
   useEffect(() => {
     try {
@@ -33,7 +50,29 @@ export function CookieConsent({ openSignal = 0 }: { openSignal?: number }) {
   const save = (a: boolean, m: boolean) => {
     const prefs: Prefs = { necessary: true, analytics: a, marketing: m, timestamp: Date.now() };
     try { localStorage.setItem(KEY, JSON.stringify(prefs)); } catch {}
-    setVisible(false); setCustomize(false);
+
+    // Determine the canonical consent action
+    let action: "accept_all" | "reject_all" | "custom";
+    if (a && m) action = "accept_all";
+    else if (!a && !m) action = "reject_all";
+    else action = "custom";
+
+    const gpc = detectGPC();
+
+    // Fire-and-forget — consent log failure never blocks the UI
+    logConsent({
+      consentAction:        action,
+      analytics:            a,
+      marketing:            m,
+      gpcSignalDetected:    gpc,
+      privacyPolicyVersion: POLICY_VERSION,
+      sessionId:            getSessionId(),
+    }).catch(() => {
+      // Silently swallow — consent banner must never crash or block
+    });
+
+    setVisible(false);
+    setCustomize(false);
   };
 
   if (!visible) return null;

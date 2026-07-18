@@ -68,6 +68,7 @@ export interface PublicProduct {
   brand: string | null;
   condition: Product["condition"];
   availability: Product["availability"];
+  stockQuantity: number;
   images: string[];
   features: string[];
   categoryId: string | null;
@@ -86,6 +87,7 @@ export function toPublicProduct(p: Product): PublicProduct {
     brand: p.brand,
     condition: p.condition,
     availability: p.availability,
+    stockQuantity: p.stock_quantity,
     images: [p.primary_image_url, ...p.image_urls],
     features: p.features,
     categoryId: p.category_id,

@@ -21,7 +21,7 @@ export const Route = createFileRoute("/billing-terms-conditions")({
       <p>Checkout is secured with <strong>SSL encryption</strong>. Card details are handled by PCI-compliant payment processors and are never stored on our servers.</p>
 
       <h2>No Hidden Fees</h2>
-      <p>The price shown at checkout is your final price. Shipping is free on every order.</p>
+      <p>The price shown at checkout is your final price. Shipping is free on orders over $350; a flat rate applies to orders below that threshold.</p>
 
       <h2>Subscription Billing</h2>
       <p>We do not offer subscriptions or recurring billing — all purchases are one-time.</p>

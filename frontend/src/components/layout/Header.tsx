@@ -59,7 +59,7 @@ export function Header() {
 
   // Which dashboard link to show based on role
   const dashboardPath =
-    user?.role === "admin"
+    user?.role === "admin" || user?.role === "product_manager"
       ? "/admin/dashboard"
       : user?.role === "store_manager"
         ? "/store-manager/dashboard"
@@ -174,7 +174,13 @@ export function Header() {
                       className="flex items-center gap-2 px-4 py-2.5 text-sm hover:bg-muted transition-colors"
                     >
                       <LayoutDashboard className="h-4 w-4 text-text-secondary" />
-                      {user.role === "admin" ? "Admin Panel" : user.role === "store_manager" ? "Manager Panel" : "My Account"}
+                      {user.role === "admin"
+                        ? "Admin Panel"
+                        : user.role === "store_manager"
+                        ? "Manager Panel"
+                        : user.role === "product_manager"
+                        ? "Product Manager Panel"
+                        : "My Account"}
                     </Link>
                     <button
                       onClick={handleLogout}
@@ -204,23 +210,36 @@ export function Header() {
         <div className="fixed inset-0 z-50 bg-black/60" onClick={() => setSearchOpen(false)}>
           <div className="bg-surface w-full py-8 px-4" onClick={(e) => e.stopPropagation()}>
             <div className="mx-auto max-w-3xl">
-              <div className="flex items-center gap-3">
-                <Search className="h-5 w-5 text-text-secondary" />
-                <input
-                  autoFocus
-                  placeholder="Search for products..."
-                  className="flex-1 text-lg py-3 outline-none bg-transparent"
-                />
-                <button onClick={() => setSearchOpen(false)} className="p-2" aria-label="Close">
-                  <X className="h-5 w-5" />
-                </button>
-              </div>
+              <form
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  const q = (e.currentTarget.elements.namedItem("q") as HTMLInputElement).value.trim();
+                  if (!q) return;
+                  setSearchOpen(false);
+                  navigate({ to: "/shop", search: { q } });
+                }}
+              >
+                <div className="flex items-center gap-3">
+                  <Search className="h-5 w-5 text-text-secondary" />
+                  <input
+                    name="q"
+                    autoFocus
+                    placeholder="Search for products..."
+                    className="flex-1 text-lg py-3 outline-none bg-transparent"
+                  />
+                  <button type="submit" className="btn-primary text-sm px-4 py-2">Search</button>
+                  <button type="button" onClick={() => setSearchOpen(false)} className="p-2" aria-label="Close">
+                    <X className="h-5 w-5" />
+                  </button>
+                </div>
+              </form>
               <div className="mt-6">
                 <p className="text-xs uppercase tracking-wide text-text-secondary mb-3">Popular searches</p>
                 <div className="flex flex-wrap gap-2">
                   {popularSearches.map((s) => (
                     <button
                       key={s}
+                      onClick={() => { setSearchOpen(false); navigate({ to: "/shop", search: { q: s } }); }}
                       className="px-3 py-1.5 rounded-full border border-border text-sm hover:border-primary hover:text-primary"
                     >
                       {s}
@@ -278,7 +297,13 @@ export function Header() {
                     className="py-3 border-b border-border text-base font-medium flex items-center gap-2"
                   >
                     <LayoutDashboard className="h-4 w-4" />
-                    {user.role === "admin" ? "Admin Panel" : user.role === "store_manager" ? "Manager Panel" : "My Account"}
+                    {user.role === "admin"
+                      ? "Admin Panel"
+                      : user.role === "store_manager"
+                      ? "Manager Panel"
+                      : user.role === "product_manager"
+                      ? "Product Manager Panel"
+                      : "My Account"}
                   </Link>
                   <button
                     onClick={handleLogout}

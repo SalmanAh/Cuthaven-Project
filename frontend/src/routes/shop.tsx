@@ -1,10 +1,11 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { LayoutGrid, List, X } from "lucide-react";
+import { LayoutGrid, List, X, Search } from "lucide-react";
 import { PageHero } from "@/components/ui/PageHero";
 import { ProductCard } from "@/components/ui/ProductCard";
 import { getProducts, getCategories } from "@/lib/api-client";
+import { z } from "zod";
 
 export const Route = createFileRoute("/shop")({
   head: () => ({
@@ -15,17 +16,33 @@ export const Route = createFileRoute("/shop")({
       { property: "og:description", content: "Full CutHaven catalog with filters, sorting, and free shipping." },
     ],
   }),
+  validateSearch: z.object({ q: z.string().optional(), category: z.string().optional() }).parse,
   component: ShopPage,
 });
 
+const STORE_URL = import.meta.env.VITE_STORE_URL ?? "https://www.cuthaven.com";
+
+const shopBreadcrumbJsonLd = {
+  "@context": "https://schema.org",
+  "@type": "BreadcrumbList",
+  itemListElement: [
+    { "@type": "ListItem", position: 1, name: "Home", item: STORE_URL },
+    { "@type": "ListItem", position: 2, name: "Shop", item: `${STORE_URL}/shop` },
+  ],
+};
+
 type Sort = "default" | "price-asc" | "price-desc" | "rating";
 
+const PAGE_SIZE = 12;
+
 function ShopPage() {
-  const [selectedCats, setSelectedCats] = useState<string[]>([]);
-  const [maxPrice, setMaxPrice] = useState(500);
+  const { q: initialQ, category: initialCat } = Route.useSearch();
+  const [searchQ, setSearchQ] = useState(initialQ ?? "");
+  const [selectedCats, setSelectedCats] = useState<string[]>(initialCat ? [initialCat] : []);
   const [inStockOnly, setInStockOnly] = useState(false);
   const [sort, setSort] = useState<Sort>("default");
   const [view, setView] = useState<"grid" | "list">("grid");
+  const [page, setPage] = useState(1);
 
   const { data: products, isLoading, isError } = useQuery({
     queryKey: ["products"],
@@ -37,8 +54,31 @@ function ShopPage() {
     queryFn: getCategories,
   });
 
+  // Calculate the highest price from products to set as default max
+  const highestPrice = useMemo(() => {
+    if (!products || products.length === 0) return 5000;
+    return Math.ceil(Math.max(...products.map(p => p.salePrice ?? p.price)));
+  }, [products]);
+
+  const [maxPrice, setMaxPrice] = useState(highestPrice);
+
+  // Update maxPrice when products load and highestPrice changes
+  useMemo(() => {
+    if (highestPrice > maxPrice) {
+      setMaxPrice(highestPrice);
+    }
+  }, [highestPrice]);
+
   const filtered = useMemo(() => {
     let list = (products ?? []).filter((p) => {
+      if (searchQ.trim()) {
+        const q = searchQ.trim().toLowerCase();
+        const matches =
+          p.name.toLowerCase().includes(q) ||
+          (p.shortDescription ?? "").toLowerCase().includes(q) ||
+          (p.brand ?? "").toLowerCase().includes(q);
+        if (!matches) return false;
+      }
       if (selectedCats.length && !selectedCats.includes(p.category)) return false;
       if ((p.salePrice ?? p.price) > maxPrice) return false;
       if (inStockOnly && !p.inStock) return false;
@@ -48,15 +88,34 @@ function ShopPage() {
     if (sort === "price-desc") list = [...list].sort((a, b) => (b.salePrice ?? b.price) - (a.salePrice ?? a.price));
     if (sort === "rating") list = [...list].sort((a, b) => b.rating - a.rating);
     return list;
-  }, [selectedCats, maxPrice, inStockOnly, sort]);
+  }, [products, searchQ, selectedCats, maxPrice, inStockOnly, sort]);
 
-  const toggleCat = (c: string) => setSelectedCats((s) => s.includes(c) ? s.filter((x) => x !== c) : [...s, c]);
-  const clearAll = () => { setSelectedCats([]); setMaxPrice(500); setInStockOnly(false); };
-  const activeCount = selectedCats.length + (inStockOnly ? 1 : 0) + (maxPrice < 500 ? 1 : 0);
+  const toggleCat = (c: string) => { setPage(1); setSelectedCats((s) => s.includes(c) ? s.filter((x) => x !== c) : [...s, c]); };
+  const clearAll = () => { setSelectedCats([]); setMaxPrice(highestPrice); setInStockOnly(false); setSearchQ(""); setPage(1); };
+  const activeCount = selectedCats.length + (inStockOnly ? 1 : 0) + (maxPrice < highestPrice ? 1 : 0) + (searchQ.trim() ? 1 : 0);
+
+  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+  const safePage = Math.min(page, totalPages);
+  const paged = filtered.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE);
+
+  // build page number list — always show first, last, current ±1, with ellipsis
+  const pageNumbers: (number | "…")[] = [];
+  for (let i = 1; i <= totalPages; i++) {
+    if (i === 1 || i === totalPages || (i >= safePage - 1 && i <= safePage + 1)) {
+      pageNumbers.push(i);
+    } else if (pageNumbers[pageNumbers.length - 1] !== "…") {
+      pageNumbers.push("…");
+    }
+  }
 
   return (
     <div>
-      <PageHero title="Shop" subtitle="Every tool, hand-picked for pros and weekend builders." crumbs={[{ label: "Shop" }]} />
+      {/* ── JSON-LD breadcrumb ── */}
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(shopBreadcrumbJsonLd) }}
+      />
+      <PageHero title="Shop" subtitle="Every tool, hand-picked for pros and weekend builders." />
 
       <div className="mx-auto max-w-7xl px-4 py-10 grid lg:grid-cols-[280px_1fr] gap-8">
         <aside className="card-surface p-5 h-fit lg:sticky lg:top-24">
@@ -80,23 +139,45 @@ function ShopPage() {
 
           <div className="mb-6">
             <p className="text-sm font-semibold mb-2">Max Price: <span className="text-accent">${maxPrice}</span></p>
-            <input type="range" min={20} max={500} step={10} value={maxPrice} onChange={(e) => setMaxPrice(Number(e.target.value))} className="w-full accent-primary" />
+            <input type="range" min={20} max={highestPrice} step={10} value={maxPrice} onChange={(e) => { setMaxPrice(Number(e.target.value)); setPage(1); }} className="w-full accent-primary" />
           </div>
 
           <div className="mb-2">
             <p className="text-sm font-semibold mb-3">Availability</p>
             <label className="flex items-center gap-2 text-sm cursor-pointer">
-              <input type="checkbox" checked={inStockOnly} onChange={(e) => setInStockOnly(e.target.checked)} className="accent-primary" />
+              <input type="checkbox" checked={inStockOnly} onChange={(e) => { setInStockOnly(e.target.checked); setPage(1); }} className="accent-primary" />
               In stock only
             </label>
           </div>
         </aside>
 
         <div>
+          {/* ── Search bar ── */}
+          <div className="relative mb-5">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-text-secondary pointer-events-none" />
+            <input
+              type="search"
+              value={searchQ}
+              onChange={(e) => { setSearchQ(e.target.value); setPage(1); }}
+              placeholder="Search tools by name, brand or description…"
+              className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-border text-sm focus:outline-none focus:border-primary bg-surface"
+              aria-label="Search products"
+            />
+            {searchQ && (
+              <button
+                onClick={() => { setSearchQ(""); setPage(1); }}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-text-secondary hover:text-foreground"
+                aria-label="Clear search"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            )}
+          </div>
+
           <div className="flex flex-wrap gap-3 items-center justify-between mb-5">
             <p className="text-sm text-text-secondary">Showing <span className="font-semibold text-foreground">{filtered.length}</span> results</p>
             <div className="flex items-center gap-3">
-              <select value={sort} onChange={(e) => setSort(e.target.value as Sort)}
+              <select value={sort} onChange={(e) => { setSort(e.target.value as Sort); setPage(1); }}
                 className="px-3 py-2 rounded-lg border border-border text-sm focus:outline-none focus:border-primary bg-surface">
                 <option value="default">Default sorting</option>
                 <option value="price-asc">Price: Low to High</option>
@@ -133,11 +214,11 @@ function ShopPage() {
             </div>
           ) : view === "grid" ? (
             <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-5">
-              {filtered.map((p) => <ProductCard key={p.id} product={p} />)}
+              {paged.map((p) => <ProductCard key={p.id} product={p} />)}
             </div>
           ) : (
             <div className="space-y-4">
-              {filtered.map((p) => (
+              {paged.map((p) => (
                 <div key={p.id} className="card-surface p-4 flex gap-4">
                   <img src={p.images[0]} alt={p.name} className="h-32 w-32 rounded-lg object-cover" />
                   <div className="flex-1">
@@ -151,12 +232,33 @@ function ShopPage() {
             </div>
           )}
 
-          <div className="flex items-center justify-center gap-1 mt-10">
-            {[1, 2, 3, 4, 5].map((n) => (
-              <button key={n} className={`h-9 w-9 rounded-full text-sm font-medium ${n === 1 ? "bg-primary text-primary-foreground" : "hover:bg-muted"}`}>{n}</button>
-            ))}
-            <button className="h-9 px-4 rounded-full text-sm font-medium hover:bg-muted">Next →</button>
-          </div>
+          {totalPages > 1 && (
+            <div className="flex items-center justify-center gap-1 mt-10">
+              <button
+                onClick={() => { setPage((p) => Math.max(1, p - 1)); window.scrollTo({ top: 0, behavior: "smooth" }); }}
+                disabled={safePage === 1}
+                className="h-9 px-4 rounded-full text-sm font-medium hover:bg-muted disabled:opacity-30 disabled:cursor-not-allowed"
+              >← Prev</button>
+
+              {pageNumbers.map((n, i) =>
+                n === "…" ? (
+                  <span key={`ellipsis-${i}`} className="h-9 w-9 flex items-center justify-center text-text-secondary text-sm">…</span>
+                ) : (
+                  <button
+                    key={n}
+                    onClick={() => { setPage(n); window.scrollTo({ top: 0, behavior: "smooth" }); }}
+                    className={`h-9 w-9 rounded-full text-sm font-medium transition-colors ${n === safePage ? "bg-primary text-primary-foreground" : "hover:bg-muted"}`}
+                  >{n}</button>
+                )
+              )}
+
+              <button
+                onClick={() => { setPage((p) => Math.min(totalPages, p + 1)); window.scrollTo({ top: 0, behavior: "smooth" }); }}
+                disabled={safePage === totalPages}
+                className="h-9 px-4 rounded-full text-sm font-medium hover:bg-muted disabled:opacity-30 disabled:cursor-not-allowed"
+              >Next →</button>
+            </div>
+          )}
         </div>
       </div>
     </div>

@@ -1,5 +1,6 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
 import type { Product } from "@/data/products";
+import { useAuth } from "./AuthContext";
 
 export interface CartItem { product: Product; quantity: number; }
 
@@ -16,23 +17,46 @@ interface CartContextValue {
 const CartContext = createContext<CartContextValue | null>(null);
 
 export function CartProvider({ children }: { children: ReactNode }) {
+  const { user } = useAuth();
   const [items, setItems] = useState<CartItem[]>([]);
 
+  // Cart key is user-specific for logged-in customers, shared for guests
+  const cartKey = user ? `ch-cart-${user.id}` : "ch-cart-guest";
+
+  // Load cart from localStorage on mount AND when user changes (login/logout)
   useEffect(() => {
     try {
-      const stored = typeof window !== "undefined" ? localStorage.getItem("ch-cart") : null;
-      if (stored) setItems(JSON.parse(stored));
-    } catch {}
-  }, []);
+      const stored = typeof window !== "undefined" ? localStorage.getItem(cartKey) : null;
+      if (stored) {
+        setItems(JSON.parse(stored));
+      } else {
+        setItems([]); // Clear cart when switching to a user with no cart
+      }
+    } catch {
+      setItems([]);
+    }
+  }, [cartKey]); // Re-run when cartKey changes (user logs in/out)
+
+  // Save cart to localStorage whenever items change
   useEffect(() => {
-    try { if (typeof window !== "undefined") localStorage.setItem("ch-cart", JSON.stringify(items)); } catch {}
-  }, [items]);
+    try {
+      if (typeof window !== "undefined") {
+        localStorage.setItem(cartKey, JSON.stringify(items));
+      }
+    } catch {}
+  }, [items, cartKey]);
 
   const addItem = (product: Product, qty = 1) => {
     setItems((prev) => {
       const existing = prev.find((i) => i.product.id === product.id);
-      if (existing) return prev.map((i) => i.product.id === product.id ? { ...i, quantity: i.quantity + qty } : i);
-      return [...prev, { product, quantity: qty }];
+      const max = product.stockQuantity > 0 ? product.stockQuantity : 999;
+      if (existing) {
+        const newQty = Math.min(existing.quantity + qty, max);
+        return prev.map((i) =>
+          i.product.id === product.id ? { ...i, quantity: newQty } : i
+        );
+      }
+      return [...prev, { product, quantity: Math.min(qty, max) }];
     });
   };
   const removeItem = (id: string) => setItems((prev) => prev.filter((i) => i.product.id !== id));
@@ -57,3 +81,4 @@ export function useCart() {
   if (!ctx) throw new Error("useCart must be used inside CartProvider");
   return ctx;
 }
+

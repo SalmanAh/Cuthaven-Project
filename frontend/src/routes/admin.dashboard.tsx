@@ -1,7 +1,14 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { useState, useMemo } from "react";
-import { LayoutDashboard, Package, ShoppingBag, FolderOpen, Users, UserCog, Settings, LogOut, Search, Eye, Pencil, Trash2, Plus, MoreVertical } from "lucide-react";
-import { AreaChart, Area, BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from "recharts";
+import { useState, useEffect, useCallback } from "react";
+import {
+  LayoutDashboard, Package, ShoppingBag, FolderOpen, Users,
+  UserCog, Settings, LogOut, Search, Eye, Pencil, Trash2, Plus,
+  MoreVertical, Tag, Star, CheckCircle2, XCircle, BookOpen,
+} from "lucide-react";
+import {
+  AreaChart, Area, BarChart, Bar, PieChart, Pie, Cell,
+  XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend,
+} from "recharts";
 import { toast } from "sonner";
 import { DashboardShell, DashCard, StatCard, type NavItem } from "@/components/dashboard/DashboardShell";
 import { TimeFilter } from "@/components/dashboard/TimeFilter";
@@ -10,23 +17,62 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Switch } from "@/components/ui/switch";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
-import { mockOrders, type Order, type OrderStatus } from "@/data/orders";
-import { products as seedProducts, type Product } from "@/data/products";
-import { categories as seedCats, type Category } from "@/data/categories";
-import { customers } from "@/data/customers";
-import { storeManagers as seedSMs, type StoreManager } from "@/data/store-managers";
-import { periodStats, revenueSeries, statusDistribution, type Period } from "@/data/analytics";
 import { RequireAuth } from "@/components/auth/RequireAuth";
 import { useAuth } from "@/context/AuthContext";
+import {
+  adminGetOrders, adminGetOrderById, adminUpdateOrderStatus,
+  adminGetProducts, adminCreateProduct, adminUpdateProduct, adminDeleteProduct,
+  adminGetCustomers, adminGetCustomerById,
+  adminGetStaff, adminCreateStaff, adminToggleStaff,
+  adminGetAnalyticsSummary, adminGetAnalyticsSeries,
+  adminGetCoupons, adminCreateCoupon, adminUpdateCoupon, adminDeleteCoupon,
+  adminGetBlogPosts, adminCreateBlogPost, adminUpdateBlogPost, adminDeleteBlogPost,
+  adminUpdatePaymentStatus,
+  getCategories,
+  type AdminOrder, type AdminProduct, type AdminCustomer,
+  type AdminStaffMember, type AdminStats, type AdminRevenueSeries,
+  type AdminStatusDistribution, type AdminPeriod, type ApiCategory,
+  type AdminCoupon, type BlogPost,
+} from "@/lib/api-client";
 
-type Tab = "overview" | "orders" | "products" | "categories" | "customers" | "managers" | "settings";
+// ─── Admin reviews API (not yet in api-client — called directly) ───────────
+const API_URL = import.meta.env.VITE_API_URL ?? "http://localhost:4000/api";
+const TOKEN_KEY = "ch-access-token";
+
+async function adminFetch<T>(path: string, options: RequestInit = {}): Promise<T> {
+  const token = typeof window !== "undefined" ? localStorage.getItem(TOKEN_KEY) : null;
+  const res = await fetch(`${API_URL}${path}`, {
+    ...options,
+    headers: {
+      "Content-Type": "application/json",
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      ...(options.headers ?? {}),
+    },
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error ?? `Request failed ${res.status}`);
+  return data as T;
+}
+
+interface AdminReview {
+  id: string;
+  rating: number;
+  review_text: string | null;
+  is_verified_purchase: boolean;
+  is_approved: boolean;
+  disclosed_incentive: boolean;
+  insider_relationship: string | null;
+  created_at: string;
+  products: { name: string; slug: string } | null;
+  customers: { first_name: string; last_name: string; email: string } | null;
+}
+
+type Tab = "overview" | "orders" | "products" | "categories" | "customers" | "managers" | "coupons" | "reviews" | "blog" | "settings";
 
 export const Route = createFileRoute("/admin/dashboard")({
   head: () => ({ meta: [
     { title: "Admin — CutHaven" },
     { name: "description", content: "Admin control panel for CutHaven." },
-    { property: "og:title", content: "Admin — CutHaven" },
-    { property: "og:description", content: "Admin control panel for CutHaven." },
     { name: "robots", content: "noindex" },
   ] }),
   component: AdminDashboard,
@@ -35,63 +81,113 @@ export const Route = createFileRoute("/admin/dashboard")({
 function AdminDashboard() {
   const [tab, setTab] = useState<Tab>("overview");
   const nav = useNavigate();
-  const { logout } = useAuth();
+  const { logout, user } = useAuth();
+  const handleLogout = async () => { await logout(); nav({ to: "/account/login" }); };
 
-  const handleLogout = async () => {
-    await logout();
-    nav({ to: "/account/login" });
+  const allItems: NavItem[] = [
+    { key: "overview",   label: "Overview",       icon: LayoutDashboard },
+    { key: "orders",     label: "Orders",          icon: Package },
+    { key: "products",   label: "Products",        icon: ShoppingBag },
+    { key: "categories", label: "Categories",      icon: FolderOpen },
+    { key: "customers",  label: "Customers",       icon: Users },
+    { key: "managers",   label: "Store Managers",  icon: UserCog },
+    { key: "coupons",    label: "Coupons",         icon: Tag },
+    { key: "reviews",    label: "Reviews",         icon: Star },
+    { key: "blog",       label: "Blog",            icon: BookOpen },
+    { key: "settings",   label: "Settings",        icon: Settings },
+    { key: "logout",     label: "Logout",          icon: LogOut, onClick: handleLogout },
+  ];
+
+  // Filter sidebar based on role — product_manager only sees: overview, orders, products
+  const items = user?.role === "product_manager"
+    ? allItems.filter((i) => ["overview", "orders", "products", "logout"].includes(i.key))
+    : allItems;
+
+  const titles: Record<Tab, string> = {
+    overview: "Admin Overview", orders: "Orders", products: "Products",
+    categories: "Categories", customers: "Customers", managers: "Store Managers",
+    coupons: "Coupons", reviews: "Reviews", blog: "Blog", settings: "Settings",
   };
 
-  const items: NavItem[] = [
-    { key: "overview", label: "Overview", icon: LayoutDashboard },
-    { key: "orders", label: "Orders", icon: Package },
-    { key: "products", label: "Products", icon: ShoppingBag },
-    { key: "categories", label: "Categories", icon: FolderOpen },
-    { key: "customers", label: "Customers", icon: Users },
-    { key: "managers", label: "Store Managers", icon: UserCog },
-    { key: "settings", label: "Settings", icon: Settings },
-    { key: "logout", label: "Logout", icon: LogOut, onClick: handleLogout },
-  ];
-  const titles: Record<Tab, string> = { overview: "Admin Overview", orders: "Orders", products: "Products", categories: "Categories", customers: "Customers", managers: "Store Managers", settings: "Settings" };
+  const sidebarTitle = user?.role === "product_manager" ? "Product Manager" : "Admin";
+
   return (
-    <RequireAuth roles={["admin"]}>
-      <DashboardShell title={titles[tab]} sidebarTitle="Admin" nav={items} activeKey={tab} onSelect={(k) => setTab(k as Tab)}>
-        {tab === "overview" && <Overview />}
-        {tab === "orders" && <OrdersPage />}
-        {tab === "products" && <ProductsPage />}
+    <RequireAuth roles={["admin", "store_manager", "product_manager"]}>
+      <DashboardShell title={titles[tab]} sidebarTitle={sidebarTitle} nav={items} activeKey={tab} onSelect={(k) => setTab(k as Tab)}>
+        {tab === "overview"   && <Overview />}
+        {tab === "orders"     && <OrdersPage />}
+        {tab === "products"   && <ProductsPage />}
         {tab === "categories" && <CategoriesPage />}
-        {tab === "customers" && <CustomersPage />}
-        {tab === "managers" && <ManagersPage />}
-        {tab === "settings" && <SettingsPage />}
+        {tab === "customers"  && <CustomersPage />}
+        {tab === "managers"   && <ManagersPage />}
+        {tab === "coupons"    && <CouponsPage />}
+        {tab === "reviews"    && <ReviewsPage />}
+        {tab === "blog"       && <BlogPage />}
+        {tab === "settings"   && <SettingsPage />}
       </DashboardShell>
     </RequireAuth>
   );
 }
 
+// ─── Shared loading / error helpers ───────────────────────────────────────
+function Spinner() {
+  return <div className="flex justify-center py-12"><div className="h-7 w-7 rounded-full border-4 border-primary border-t-transparent animate-spin" /></div>;
+}
+function ErrMsg({ msg }: { msg: string }) {
+  return <p className="text-sm text-destructive py-8 text-center">{msg}</p>;
+}
+
+// ─── Overview ─────────────────────────────────────────────────────────────
 function Overview() {
-  const [period, setPeriod] = useState<Period>("today");
-  const s = periodStats[period];
-  const series = revenueSeries[period];
-  const dist = statusDistribution[period];
-  const topProducts = [...seedProducts].sort((a, b) => b.reviewCount - a.reviewCount).slice(0, 5);
+  const [period, setPeriod] = useState<AdminPeriod>("today");
+  const [stats, setStats]   = useState<AdminStats | null>(null);
+  const [series, setSeries] = useState<AdminRevenueSeries[]>([]);
+  const [dist, setDist]     = useState<AdminStatusDistribution[]>([]);
+  const [orders, setOrders] = useState<AdminOrder[]>([]);
+  const [products, setProds]= useState<AdminProduct[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  const load = useCallback(async (p: AdminPeriod) => {
+    setLoading(true);
+    try {
+      const [sumRes, serRes, ordRes, prodRes] = await Promise.all([
+        adminGetAnalyticsSummary(p),
+        adminGetAnalyticsSeries(p),
+        adminGetOrders({ limit: 8 }),
+        adminGetProducts({ limit: 5, isActive: true }),
+      ]);
+      setStats(sumRes.stats);
+      setSeries(serRes.series);
+      setDist(serRes.distribution);
+      setOrders(ordRes.orders);
+      setProds(prodRes.products);
+    } catch (e: any) {
+      toast.error(e.message ?? "Failed to load overview");
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => { load(period); }, [period, load]);
+
+  if (loading) return <Spinner />;
+  if (!stats)  return <ErrMsg msg="Could not load analytics." />;
+
   return (
     <div className="space-y-6">
-      <div className="flex justify-end"><TimeFilter value={period} onChange={setPeriod} /></div>
-
+      <div className="flex justify-end"><TimeFilter value={period} onChange={(p) => setPeriod(p as AdminPeriod)} /></div>
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <StatCard label="Total Revenue" value={`$${s.revenue.toLocaleString()}`} trend={s.revTrend} />
-        <StatCard label="Total Orders" value={s.orders} trend={s.ordTrend} />
-        <StatCard label="Total Customers" value={s.customers} trend={s.custTrend} />
-        <StatCard label="Avg Order Value" value={`$${s.avgOrder}`} trend={s.aovTrend} />
+        <StatCard label="Total Revenue"   value={`$${stats.revenue.toLocaleString()}`} trend={stats.revTrend} />
+        <StatCard label="Total Orders"    value={stats.orders}    trend={stats.ordTrend} />
+        <StatCard label="Total Customers" value={stats.customers} trend={stats.custTrend} />
+        <StatCard label="Avg Order Value" value={`$${stats.avgOrder}`} trend={stats.aovTrend} />
       </div>
-
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <StatCard label="Pending" value={s.pending} accent="#E07B1A" />
-        <StatCard label="Processing" value={s.processing} accent="#2D6A4F" />
-        <StatCard label="Shipped" value={s.shipped} accent="#4A90E2" />
-        <StatCard label="Delivered" value={s.delivered} accent="#1B4332" />
+        <StatCard label="Pending"    value={stats.pending}    accent="#E07B1A" />
+        <StatCard label="Processing" value={stats.processing} accent="#2D6A4F" />
+        <StatCard label="Shipped"    value={stats.shipped}    accent="#4A90E2" />
+        <StatCard label="Delivered"  value={stats.delivered}  accent="#1B4332" />
       </div>
-
       <div className="grid lg:grid-cols-3 gap-4">
         <DashCard className="lg:col-span-2">
           <h3 className="font-display text-lg font-bold mb-4">Revenue</h3>
@@ -118,7 +214,6 @@ function Overview() {
           </div>
         </DashCard>
       </div>
-
       <div className="grid lg:grid-cols-3 gap-4">
         <DashCard className="lg:col-span-2">
           <h3 className="font-display text-lg font-bold mb-4">Orders per Day</h3>
@@ -128,43 +223,40 @@ function Overview() {
               <XAxis dataKey="label" fontSize={11} stroke="var(--color-text-secondary)" />
               <YAxis fontSize={11} stroke="var(--color-text-secondary)" />
               <Tooltip contentStyle={{ borderRadius: 12, border: "1px solid var(--color-border)" }} />
-              <Bar dataKey="orders" fill="#E07B1A" radius={[6, 6, 0, 0]} />
+              <Bar dataKey="orders" fill="#E07B1A" radius={[6,6,0,0]} />
             </BarChart></ResponsiveContainer>
           </div>
         </DashCard>
         <DashCard>
           <h3 className="font-display text-lg font-bold mb-4">Top Products</h3>
           <ul className="space-y-3">
-            {topProducts.map((p) => (
+            {products.map((p) => (
               <li key={p.id} className="flex gap-3 items-center">
-                <img src={p.images[0]} alt="" className="h-10 w-10 rounded object-cover" />
-                <div className="flex-1 min-w-0"><p className="text-sm font-medium truncate">{p.name}</p><p className="text-xs text-text-secondary">{p.reviewCount} sold</p></div>
+                <img src={p.primaryImageUrl} alt="" className="h-10 w-10 rounded object-cover" />
+                <div className="flex-1 min-w-0"><p className="text-sm font-medium truncate">{p.name}</p><p className="text-xs text-text-secondary">{p.stockQuantity} in stock</p></div>
                 <span className="text-accent font-semibold text-sm">${p.price}</span>
               </li>
             ))}
           </ul>
         </DashCard>
       </div>
-
       <DashCard>
         <h3 className="font-display text-lg font-bold mb-4">Recent Orders</h3>
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead><tr className="text-left text-text-secondary border-b border-border">
-              <th className="py-2 pr-3">Order #</th><th className="py-2 pr-3">Customer</th><th className="py-2 pr-3">Date</th>
-              <th className="py-2 pr-3">Status</th><th className="py-2">Total</th>
+              <th className="py-2 pr-3">Order #</th><th className="py-2 pr-3">Customer</th>
+              <th className="py-2 pr-3">Date</th><th className="py-2 pr-3">Status</th><th className="py-2">Total</th>
             </tr></thead>
-            <tbody>
-              {mockOrders.slice(0, 8).map((o) => (
-                <tr key={o.id} className="border-b border-border">
-                  <td className="py-2.5 pr-3 font-mono">{o.id}</td>
-                  <td className="py-2.5 pr-3">{o.customer}</td>
-                  <td className="py-2.5 pr-3">{o.date}</td>
-                  <td className="py-2.5 pr-3"><StatusBadge status={o.status} /></td>
-                  <td className="py-2.5 font-semibold">${o.total.toFixed(2)}</td>
-                </tr>
-              ))}
-            </tbody>
+            <tbody>{orders.map((o) => (
+              <tr key={o.id} className="border-b border-border">
+                <td className="py-2.5 pr-3 font-mono">{o.orderNumber}</td>
+                <td className="py-2.5 pr-3">{o.customerName ?? o.customerEmail ?? "Guest"}</td>
+                <td className="py-2.5 pr-3">{o.createdAt.slice(0,10)}</td>
+                <td className="py-2.5 pr-3"><StatusBadge status={o.status as any} /></td>
+                <td className="py-2.5 font-semibold">${o.total.toFixed(2)}</td>
+              </tr>
+            ))}</tbody>
           </table>
         </div>
       </DashCard>
@@ -172,110 +264,158 @@ function Overview() {
   );
 }
 
-// ---- Orders ----
+// ─── Orders ────────────────────────────────────────────────────────────────
 function OrdersPage() {
-  const [orders, setOrders] = useState<Order[]>(mockOrders);
-  const [filter, setFilter] = useState<OrderStatus | "All">("All");
-  const [payFilter, setPayFilter] = useState<"All" | "Paid" | "Unpaid">("All");
-  const [q, setQ] = useState("");
-  const [detail, setDetail] = useState<string | null>(null);
+  const [orders, setOrders]   = useState<AdminOrder[]>([]);
+  const [total, setTotal]     = useState(0);
+  const [loading, setLoading] = useState(true);
+  const [filter, setFilter]   = useState("All");
+  const [payFilter, setPayFilter] = useState("All");
+  const [q, setQ]             = useState("");
+  const [detail, setDetail]   = useState<AdminOrder | null>(null);
   const [toDelete, setToDelete] = useState<string | null>(null);
 
-  const statuses: (OrderStatus | "All")[] = ["All", "Pending", "Processing", "Shipped", "Delivered", "Cancelled", "Failed"];
-  const filtered = orders.filter((o) =>
-    (filter === "All" || o.status === filter) &&
-    (payFilter === "All" || o.payment === payFilter) &&
-    (q === "" || o.id.toLowerCase().includes(q.toLowerCase()) || o.customer.toLowerCase().includes(q.toLowerCase()) || o.email.toLowerCase().includes(q.toLowerCase()))
-  );
-  const detailOrder = detail ? orders.find((o) => o.id === detail) : null;
-  const update = (id: string, patch: Partial<Order>) => setOrders((prev) => prev.map((o) => o.id === id ? { ...o, ...patch } : o));
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      const res = await adminGetOrders({
+        status: filter !== "All" ? filter.toLowerCase() : undefined,
+        search: q || undefined,
+        limit: 50,
+      });
+      let rows = res.orders;
+      if (payFilter === "Paid")   rows = rows.filter((o) => o.paymentStatus === "paid");
+      if (payFilter === "Unpaid") rows = rows.filter((o) => o.paymentStatus !== "paid");
+      setOrders(rows);
+      setTotal(res.total);
+    } catch (e: any) { toast.error(e.message); }
+    finally { setLoading(false); }
+  }, [filter, payFilter, q]);
+
+  useEffect(() => { load(); }, [load]);
+
+  const updateStatus = async (id: string, status: AdminOrder["status"]) => {
+    try {
+      await adminUpdateOrderStatus(id, status);
+      setOrders((prev) => prev.map((o) => o.id === id ? { ...o, status } : o));
+      if (detail?.id === id) setDetail((d) => d ? { ...d, status } : d);
+      toast.success(`Status → ${status}`);
+    } catch (e: any) { toast.error(e.message); }
+  };
+
+  const markAsPaid = async (id: string) => {
+    try {
+      await adminUpdatePaymentStatus(id, "paid");
+      setOrders((prev) => prev.map((o) => o.id === id ? { ...o, paymentStatus: "paid" } : o));
+      if (detail?.id === id) setDetail((d) => d ? { ...d, paymentStatus: "paid" } : d);
+      toast.success("Order marked as paid");
+    } catch (e: any) { toast.error(e.message); }
+  };
+
+  const statuses = ["All","pending","confirmed","processing","shipped","delivered","cancelled","refunded"];
 
   return (
     <div className="space-y-4">
       <DashCard>
         <div className="flex flex-wrap gap-1.5 mb-4">
           {statuses.map((s) => {
-            const count = s === "All" ? orders.length : orders.filter((o) => o.status === s).length;
+            const count = s === "All" ? total : orders.filter((o) => o.status === s).length;
             return (
-              <button key={s} onClick={() => setFilter(s)} className={`px-3 py-1.5 rounded-full text-xs font-medium ${filter === s ? "bg-primary text-primary-foreground" : "bg-muted hover:bg-primary/10"}`}>{s} ({count})</button>
+              <button key={s} onClick={() => setFilter(s)} className={`px-3 py-1.5 rounded-full text-xs font-medium capitalize ${filter === s ? "bg-primary text-primary-foreground" : "bg-muted hover:bg-primary/10"}`}>{s} ({count})</button>
             );
           })}
         </div>
         <div className="flex flex-wrap gap-3 items-center mb-4">
           <div className="relative flex-1 min-w-[200px]">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-text-secondary" />
-            <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search order #, customer, or email" className="w-full pl-9 pr-3 py-2 rounded-lg border border-border text-sm focus:outline-none focus:border-primary" />
+            <input value={q} onChange={(e) => setQ(e.target.value)} onKeyDown={(e) => e.key === "Enter" && load()} placeholder="Search order # or customer" className="w-full pl-9 pr-3 py-2 rounded-lg border border-border text-sm focus:outline-none focus:border-primary" />
           </div>
-          <select value={payFilter} onChange={(e) => setPayFilter(e.target.value as any)} className="px-3 py-2 rounded-lg border border-border text-sm bg-surface">
-            <option value="All">All payments</option><option value="Paid">Paid</option><option value="Unpaid">Unpaid</option>
+          <select value={payFilter} onChange={(e) => setPayFilter(e.target.value)} className="px-3 py-2 rounded-lg border border-border text-sm bg-surface">
+            <option>All</option><option>Paid</option><option>Unpaid</option>
           </select>
         </div>
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead><tr className="text-left text-text-secondary border-b border-border">
-              <th className="py-2 pr-3">Order #</th><th className="py-2 pr-3">Customer</th><th className="py-2 pr-3">Email</th>
-              <th className="py-2 pr-3">Date</th><th className="py-2 pr-3">Status</th><th className="py-2 pr-3">Payment</th>
-              <th className="py-2 pr-3">Total</th><th className="py-2">Actions</th>
-            </tr></thead>
-            <tbody>
-              {filtered.slice(0, 20).map((o) => (
+        {loading ? <Spinner /> : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead><tr className="text-left text-text-secondary border-b border-border">
+                <th className="py-2 pr-3">Order #</th><th className="py-2 pr-3">Customer</th>
+                <th className="py-2 pr-3">Date</th><th className="py-2 pr-3">Status</th>
+                <th className="py-2 pr-3">Payment</th><th className="py-2 pr-3">Total</th><th className="py-2">Actions</th>
+              </tr></thead>
+              <tbody>{orders.map((o) => (
                 <tr key={o.id} className="border-b border-border">
-                  <td className="py-3 pr-3 font-mono">{o.id}</td>
-                  <td className="py-3 pr-3">{o.customer}</td>
-                  <td className="py-3 pr-3 text-text-secondary">{o.email}</td>
-                  <td className="py-3 pr-3">{o.date}</td>
-                  <td className="py-3 pr-3"><StatusBadge status={o.status} /></td>
-                  <td className="py-3 pr-3"><PaymentBadge status={o.payment} /></td>
+                  <td className="py-3 pr-3 font-mono">{o.orderNumber}</td>
+                  <td className="py-3 pr-3">{o.customerName ?? o.customerEmail ?? "Guest"}</td>
+                  <td className="py-3 pr-3">{o.createdAt.slice(0,10)}</td>
+                  <td className="py-3 pr-3"><StatusBadge status={o.status as any} /></td>
+                  <td className="py-3 pr-3"><PaymentBadge status={o.paymentStatus === "paid" ? "Paid" : "Unpaid"} /></td>
                   <td className="py-3 pr-3 font-semibold">${o.total.toFixed(2)}</td>
                   <td className="py-3">
                     <div className="flex items-center gap-1">
-                      <button onClick={() => setDetail(o.id)} className="p-1.5 hover:bg-muted rounded" aria-label="View"><Eye className="h-4 w-4" /></button>
-                      <select value={o.status} onChange={(e) => { update(o.id, { status: e.target.value as OrderStatus }); toast.success(`Status → ${e.target.value}`); }} className="text-xs border border-border rounded px-1.5 py-1 bg-surface">
-                        {(["Pending", "Processing", "Shipped", "Delivered", "Cancelled", "Failed"] as OrderStatus[]).map((s) => <option key={s}>{s}</option>)}
+                      <button onClick={() => setDetail(o)} className="p-1.5 hover:bg-muted rounded" aria-label="View"><Eye className="h-4 w-4" /></button>
+                      <select value={o.status} onChange={(e) => updateStatus(o.id, e.target.value as AdminOrder["status"])} className="text-xs border border-border rounded px-1.5 py-1 bg-surface">
+                        {["pending","confirmed","processing","shipped","delivered","cancelled","refunded"].map((s) => <option key={s}>{s}</option>)}
                       </select>
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild><button className="p-1.5 hover:bg-muted rounded"><MoreVertical className="h-4 w-4" /></button></DropdownMenuTrigger>
                         <DropdownMenuContent align="end">
-                          <DropdownMenuItem onClick={() => { update(o.id, { payment: "Paid" }); toast.success("Marked as paid"); }}>Mark as Paid</DropdownMenuItem>
+                          {o.paymentStatus !== "paid" && (
+                            <DropdownMenuItem onClick={() => markAsPaid(o.id)} className="text-success">
+                              Mark as Paid
+                            </DropdownMenuItem>
+                          )}
                           <DropdownMenuItem onClick={() => setToDelete(o.id)} className="text-destructive">Delete</DropdownMenuItem>
                         </DropdownMenuContent>
                       </DropdownMenu>
                     </div>
                   </td>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-        <p className="text-xs text-text-secondary mt-4">Showing 1–{Math.min(20, filtered.length)} of {filtered.length}</p>
+              ))}</tbody>
+            </table>
+            <p className="text-xs text-text-secondary mt-4">Showing {orders.length} of {total}</p>
+          </div>
+        )}
       </DashCard>
 
-      <Dialog open={!!detailOrder} onOpenChange={(v) => !v && setDetail(null)}>
+      <Dialog open={!!detail} onOpenChange={(v) => !v && setDetail(null)}>
         <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
-          {detailOrder && (
+          {detail && (
             <>
-              <DialogHeader><DialogTitle>Order {detailOrder.id}</DialogTitle></DialogHeader>
+              <DialogHeader><DialogTitle>Order {detail.orderNumber}</DialogTitle></DialogHeader>
               <div className="space-y-4 text-sm">
                 <div className="flex flex-wrap gap-2 justify-between items-center">
-                  <span>{detailOrder.customer} · {detailOrder.email}</span>
-                  <div className="flex gap-2"><StatusBadge status={detailOrder.status} /><PaymentBadge status={detailOrder.payment} /></div>
+                  <span>{detail.customerName ?? detail.customerEmail ?? "Guest"}</span>
+                  <div className="flex gap-2"><StatusBadge status={detail.status as any} /><PaymentBadge status={detail.paymentStatus === "paid" ? "Paid" : "Unpaid"} /></div>
                 </div>
-                <div className="space-y-2">
-                  {detailOrder.items.map((it, i) => (
-                    <div key={i} className="flex gap-3 items-center border-b border-border pb-2">
-                      <img src={it.image} alt="" className="h-12 w-12 rounded" />
-                      <div className="flex-1"><p className="font-medium">{it.name}</p><p className="text-xs text-text-secondary">Qty {it.quantity} × ${it.price}</p></div>
-                      <p className="font-semibold">${(it.price * it.quantity).toFixed(2)}</p>
-                    </div>
-                  ))}
-                </div>
-                <div className="flex justify-between font-bold"><span>Total</span><span className="text-accent">${detailOrder.total.toFixed(2)}</span></div>
+                <div className="space-y-2">{detail.items.map((it) => (
+                  <div key={it.id} className="flex gap-3 items-center border-b border-border pb-2">
+                    {it.productImage && <img src={it.productImage} alt="" className="h-12 w-12 rounded" />}
+                    <div className="flex-1"><p className="font-medium">{it.productName}</p><p className="text-xs text-text-secondary">Qty {it.quantity} × ${it.unitPrice}</p></div>
+                    <p className="font-semibold">${it.totalPrice.toFixed(2)}</p>
+                  </div>
+                ))}</div>
+                <div className="flex justify-between font-bold"><span>Total</span><span className="text-accent">${detail.total.toFixed(2)}</span></div>
                 <div className="pt-3 border-t border-border">
                   <p className="font-semibold mb-1">Shipping Address</p>
-                  <p className="text-text-secondary">{detailOrder.address.line1}, {detailOrder.address.city}, {detailOrder.address.state} {detailOrder.address.zip}</p>
-                  <p className="text-text-secondary">{detailOrder.address.phone}</p>
+                  <p className="text-text-secondary">{detail.shippingAddress.address}, {detail.shippingAddress.city}, {detail.shippingAddress.state} {detail.shippingAddress.zip}</p>
                 </div>
-                <p className="text-text-secondary">Payment: {detailOrder.paymentMethod}</p>
+                <p className="text-text-secondary">Payment: {detail.paymentMethod ?? detail.paymentProcessor}</p>
+                <div className="pt-2 flex flex-wrap gap-3 items-end">
+                  <div className="flex-1">
+                    <label className="block text-xs font-medium mb-1">Update Status</label>
+                    <select value={detail.status} onChange={(e) => updateStatus(detail.id, e.target.value as AdminOrder["status"])} className="text-sm border border-border rounded px-2 py-1.5 bg-surface">
+                      {["pending","confirmed","processing","shipped","delivered","cancelled","refunded"].map((s) => <option key={s}>{s}</option>)}
+                    </select>
+                  </div>
+                  {detail.paymentStatus !== "paid" && (
+                    <button
+                      onClick={() => markAsPaid(detail.id)}
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-success text-white text-sm font-semibold hover:bg-success/90 transition"
+                    >
+                      <CheckCircle2 className="h-4 w-4" /> Mark as Paid
+                    </button>
+                  )}
+                </div>
               </div>
             </>
           )}
@@ -284,10 +424,10 @@ function OrdersPage() {
 
       <AlertDialog open={!!toDelete} onOpenChange={(v) => !v && setToDelete(null)}>
         <AlertDialogContent>
-          <AlertDialogHeader><AlertDialogTitle>Delete order?</AlertDialogTitle><AlertDialogDescription>This action cannot be undone.</AlertDialogDescription></AlertDialogHeader>
+          <AlertDialogHeader><AlertDialogTitle>Delete order?</AlertDialogTitle><AlertDialogDescription>This cannot be undone.</AlertDialogDescription></AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={() => { setOrders((p) => p.filter((o) => o.id !== toDelete)); toast.success("Order deleted"); setToDelete(null); }}>Delete</AlertDialogAction>
+            <AlertDialogAction onClick={() => { setOrders((p) => p.filter((o) => o.id !== toDelete)); toast.success("Order removed from view"); setToDelete(null); }}>Delete</AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
@@ -295,20 +435,59 @@ function OrdersPage() {
   );
 }
 
-// ---- Products ----
+// ─── Products ──────────────────────────────────────────────────────────────
 function ProductsPage() {
-  const [items, setItems] = useState<Product[]>(seedProducts);
-  const [q, setQ] = useState(""); const [cat, setCat] = useState("All");
-  const [editing, setEditing] = useState<Product | null>(null);
-  const [adding, setAdding] = useState(false);
+  const [items, setItems]     = useState<AdminProduct[]>([]);
+  const [cats, setCats]       = useState<ApiCategory[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [q, setQ]             = useState("");
+  const [catFilter, setCatFilter] = useState("All");
+  const [editing, setEditing] = useState<AdminProduct | null>(null);
+  const [adding, setAdding]   = useState(false);
   const [toDelete, setToDelete] = useState<string | null>(null);
-  const cats = ["All", ...Array.from(new Set(items.map((p) => p.category)))];
-  const filtered = items.filter((p) => (cat === "All" || p.category === cat) && (q === "" || p.name.toLowerCase().includes(q.toLowerCase())));
 
-  const save = (p: Product) => {
-    setItems((prev) => prev.some((x) => x.id === p.id) ? prev.map((x) => x.id === p.id ? p : x) : [...prev, p]);
-    toast.success("Product saved"); setEditing(null); setAdding(false);
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      const [prodRes, catRes] = await Promise.all([adminGetProducts({ limit: 200 }), getCategories()]);
+      setItems(prodRes.products);
+      setCats(catRes);
+    } catch (e: any) { toast.error(e.message); }
+    finally { setLoading(false); }
+  }, []);
+
+  useEffect(() => { load(); }, [load]);
+
+  const filtered = items.filter((p) =>
+    (catFilter === "All" || p.categoryName === catFilter) &&
+    (q === "" || p.name.toLowerCase().includes(q.toLowerCase()))
+  );
+
+  const saveProduct = async (data: Partial<AdminProduct> & { id?: string }) => {
+    try {
+      if (data.id) {
+        const res = await adminUpdateProduct(data.id, data as any);
+        setItems((prev) => prev.map((p) => p.id === data.id ? res.product : p));
+        toast.success("Product updated");
+      } else {
+        const res = await adminCreateProduct(data as any);
+        setItems((prev) => [res.product, ...prev]);
+        toast.success("Product created");
+      }
+      setEditing(null); setAdding(false);
+    } catch (e: any) { toast.error(e.message); }
   };
+
+  const softDelete = async (id: string) => {
+    try {
+      await adminDeleteProduct(id);
+      setItems((prev) => prev.filter((p) => p.id !== id));
+      toast.success("Product deactivated");
+      setToDelete(null);
+    } catch (e: any) { toast.error(e.message); }
+  };
+
+  const catNames = ["All", ...Array.from(new Set(items.map((p) => p.categoryName).filter(Boolean) as string[]))];
 
   return (
     <div className="space-y-4">
@@ -319,47 +498,461 @@ function ProductsPage() {
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-text-secondary" />
               <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search products" className="w-full pl-9 pr-3 py-2 rounded-lg border border-border text-sm focus:outline-none focus:border-primary" />
             </div>
-            <select value={cat} onChange={(e) => setCat(e.target.value)} className="px-3 py-2 rounded-lg border border-border text-sm bg-surface">
-              {cats.map((c) => <option key={c}>{c}</option>)}
+            <select value={catFilter} onChange={(e) => setCatFilter(e.target.value)} className="px-3 py-2 rounded-lg border border-border text-sm bg-surface">
+              {catNames.map((c) => <option key={c}>{c}</option>)}
             </select>
           </div>
           <button onClick={() => setAdding(true)} className="btn-primary text-sm flex items-center gap-1"><Plus className="h-4 w-4" /> Add Product</button>
         </div>
+        {loading ? <Spinner /> : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead><tr className="text-left text-text-secondary border-b border-border">
+                <th className="py-2 pr-3">Image</th><th className="py-2 pr-3">Name</th><th className="py-2 pr-3">SKU</th>
+                <th className="py-2 pr-3">Category</th><th className="py-2 pr-3">Price</th><th className="py-2 pr-3">Stock</th>
+                <th className="py-2 pr-3">Active</th><th className="py-2">Actions</th>
+              </tr></thead>
+              <tbody>{filtered.map((p) => (
+                <tr key={p.id} className="border-b border-border">
+                  <td className="py-3 pr-3"><img src={p.primaryImageUrl} alt="" className="h-10 w-10 rounded object-cover" /></td>
+                  <td className="py-3 pr-3 font-medium max-w-[220px] truncate">{p.name}</td>
+                  <td className="py-3 pr-3 font-mono text-xs">{p.sku ?? "—"}</td>
+                  <td className="py-3 pr-3">{p.categoryName ?? "—"}</td>
+                  <td className="py-3 pr-3 font-semibold">${p.price}</td>
+                  <td className="py-3 pr-3">{p.stockQuantity}</td>
+                  <td className="py-3 pr-3">
+                    <Switch checked={p.isActive} onCheckedChange={async (v) => {
+                      try { await adminUpdateProduct(p.id, { isActive: v }); setItems((prev) => prev.map((x) => x.id === p.id ? { ...x, isActive: v } : x)); }
+                      catch (e: any) { toast.error(e.message); }
+                    }} />
+                  </td>
+                  <td className="py-3">
+                    <div className="flex gap-1">
+                      <button onClick={() => setEditing(p)} className="p-1.5 hover:bg-muted rounded"><Pencil className="h-4 w-4" /></button>
+                      <button onClick={() => setToDelete(p.id)} className="p-1.5 hover:bg-muted rounded text-destructive"><Trash2 className="h-4 w-4" /></button>
+                    </div>
+                  </td>
+                </tr>
+              ))}</tbody>
+            </table>
+          </div>
+        )}
+      </DashCard>
+      <ProductDialog open={!!editing || adding} onClose={() => { setEditing(null); setAdding(false); }} initial={editing} onSave={saveProduct} categories={cats} />
+      <AlertDialog open={!!toDelete} onOpenChange={(v) => !v && setToDelete(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader><AlertDialogTitle>Deactivate product?</AlertDialogTitle><AlertDialogDescription>The product will be hidden from the store but order history is preserved.</AlertDialogDescription></AlertDialogHeader>
+          <AlertDialogFooter><AlertDialogCancel>Cancel</AlertDialogCancel><AlertDialogAction onClick={() => toDelete && softDelete(toDelete)}>Deactivate</AlertDialogAction></AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </div>
+  );
+}
+
+function ProductDialog({ open, onClose, initial, onSave, categories }: {
+  open: boolean; onClose: () => void;
+  initial: AdminProduct | null;
+  onSave: (d: any) => Promise<void>;
+  categories: ApiCategory[];
+}) {
+  const blank = { name: "", slug: "", description: "", price: 0, primaryImageUrl: "", imageUrls: [] as string[], stockQuantity: 0, isActive: true, compareAtPrice: null, sku: "", brand: "CutHaven", categoryId: null, availability: "in_stock" as const };
+  const [form, setForm] = useState<any>(initial ?? blank);
+  const [uploadingPrimary, setUploadingPrimary] = useState(false);
+  const [uploadingExtra, setUploadingExtra] = useState(false);
+
+  useEffect(() => {
+    if (open) {
+      setForm(initial ? { ...initial, imageUrls: initial.imageUrls ?? [] } : { ...blank });
+    }
+  }, [initial, open]);
+
+  const upd = (k: string, v: any) => setForm((f: any) => ({ ...f, [k]: v }));
+  const genSlug = (n: string) => n.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+
+  const API_URL = import.meta.env.VITE_API_URL ?? "http://localhost:4000/api";
+  const TOKEN_KEY = "ch-access-token";
+
+  // Upload a single file — returns the public URL
+  const uploadFile = async (file: File): Promise<string> => {
+    const fd = new FormData();
+    fd.append("file", file);
+    const token = localStorage.getItem(TOKEN_KEY);
+    const res = await fetch(`${API_URL}/upload/product-image`, {
+      method: "POST",
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+      body: fd,
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error ?? "Upload failed");
+    return data.url as string;
+  };
+
+  // Handle primary image — file picker
+  const handlePrimaryUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploadingPrimary(true);
+    try {
+      const url = await uploadFile(file);
+      upd("primaryImageUrl", url);
+      toast.success("Primary image uploaded");
+    } catch (err: any) {
+      toast.error(err.message ?? "Upload failed");
+    } finally {
+      setUploadingPrimary(false);
+      e.target.value = "";
+    }
+  };
+
+  // Handle multiple additional images
+  const handleExtraUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files ?? []);
+    if (!files.length) return;
+    setUploadingExtra(true);
+    try {
+      const urls = await Promise.all(files.map(uploadFile));
+      setForm((f: any) => ({ ...f, imageUrls: [...(f.imageUrls ?? []), ...urls] }));
+      toast.success(`${urls.length} image${urls.length > 1 ? "s" : ""} uploaded`);
+    } catch (err: any) {
+      toast.error(err.message ?? "Upload failed");
+    } finally {
+      setUploadingExtra(false);
+      e.target.value = "";
+    }
+  };
+
+  const removeExtraImage = (idx: number) => {
+    setForm((f: any) => ({ ...f, imageUrls: f.imageUrls.filter((_: string, i: number) => i !== idx) }));
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={(v) => { if (!v) onClose(); }}>
+      <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
+        <DialogHeader><DialogTitle>{initial ? "Edit Product" : "Add Product"}</DialogTitle></DialogHeader>
+        <form onSubmit={async (e) => { e.preventDefault(); await onSave({ ...form, slug: form.slug || genSlug(form.name), id: initial?.id }); }} className="grid grid-cols-2 gap-3">
+
+          {/* Name */}
+          <div className="col-span-2">
+            <label className="block text-xs font-medium mb-1">Name *</label>
+            <input required value={form.name} onChange={(e) => upd("name", e.target.value)} className="w-full px-3 py-2 rounded-lg border border-border text-sm" />
+          </div>
+
+          {/* Slug + SKU */}
+          <div>
+            <label className="block text-xs font-medium mb-1">Slug</label>
+            <input value={form.slug} onChange={(e) => upd("slug", e.target.value)} placeholder={genSlug(form.name)} className="w-full px-3 py-2 rounded-lg border border-border text-sm" />
+          </div>
+          <div>
+            <label className="block text-xs font-medium mb-1">SKU</label>
+            <input value={form.sku ?? ""} onChange={(e) => upd("sku", e.target.value)} className="w-full px-3 py-2 rounded-lg border border-border text-sm" />
+          </div>
+
+          {/* Category + Price */}
+          <div>
+            <label className="block text-xs font-medium mb-1">Category</label>
+            <select value={form.categoryId ?? ""} onChange={(e) => upd("categoryId", e.target.value || null)} className="w-full px-3 py-2 rounded-lg border border-border text-sm bg-surface">
+              <option value="">— None —</option>
+              {categories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+            </select>
+          </div>
+          <div>
+            <label className="block text-xs font-medium mb-1">Price *</label>
+            <input required type="number" step="0.01" value={form.price} onChange={(e) => upd("price", +e.target.value)} className="w-full px-3 py-2 rounded-lg border border-border text-sm" />
+          </div>
+
+          {/* Compare-at + Stock */}
+          <div>
+            <label className="block text-xs font-medium mb-1">Compare-at Price</label>
+            <input type="number" step="0.01" value={form.compareAtPrice ?? ""} onChange={(e) => upd("compareAtPrice", e.target.value ? +e.target.value : null)} className="w-full px-3 py-2 rounded-lg border border-border text-sm" />
+          </div>
+          <div>
+            <label className="block text-xs font-medium mb-1">Stock Qty</label>
+            <input type="number" value={form.stockQuantity} onChange={(e) => upd("stockQuantity", +e.target.value)} className="w-full px-3 py-2 rounded-lg border border-border text-sm" />
+          </div>
+
+          {/* Description */}
+          <div className="col-span-2">
+            <label className="block text-xs font-medium mb-1">Description *</label>
+            <textarea rows={3} required value={form.description} onChange={(e) => upd("description", e.target.value)} className="w-full px-3 py-2 rounded-lg border border-border text-sm" />
+          </div>
+
+          {/* ── Primary Image ── */}
+          <div className="col-span-2">
+            <label className="block text-xs font-medium mb-1">Primary Image *</label>
+            <div className="flex gap-2 items-center">
+              <input
+                value={form.primaryImageUrl}
+                onChange={(e) => upd("primaryImageUrl", e.target.value)}
+                placeholder="Paste URL or upload below"
+                className="flex-1 px-3 py-2 rounded-lg border border-border text-sm"
+              />
+              <label className={`cursor-pointer px-3 py-2 rounded-lg border border-border text-sm font-medium hover:bg-muted transition whitespace-nowrap ${uploadingPrimary ? "opacity-50 pointer-events-none" : ""}`}>
+                {uploadingPrimary ? "Uploading…" : "📁 Upload"}
+                <input type="file" accept="image/*" className="hidden" onChange={handlePrimaryUpload} disabled={uploadingPrimary} />
+              </label>
+            </div>
+            {form.primaryImageUrl && (
+              <div className="mt-2 flex items-center gap-2">
+                <img src={form.primaryImageUrl} alt="Primary" className="h-20 w-20 rounded-lg object-cover border border-border" />
+                <button type="button" onClick={() => upd("primaryImageUrl", "")} className="text-xs text-destructive hover:underline">Remove</button>
+              </div>
+            )}
+          </div>
+
+          {/* ── Additional Images ── */}
+          <div className="col-span-2">
+            <label className="block text-xs font-medium mb-1">
+              Additional Images
+              <span className="text-text-secondary ml-1 font-normal">(up to 9 — shown in product gallery)</span>
+            </label>
+
+            {/* Upload button */}
+            <label className={`inline-flex items-center gap-1.5 cursor-pointer px-3 py-2 rounded-lg border border-border text-sm font-medium hover:bg-muted transition ${uploadingExtra ? "opacity-50 pointer-events-none" : ""}`}>
+              {uploadingExtra ? "Uploading…" : "📁 Upload Images"}
+              <input type="file" accept="image/*" multiple className="hidden" onChange={handleExtraUpload} disabled={uploadingExtra} />
+            </label>
+            <p className="text-xs text-text-secondary mt-1">Select multiple files at once — Ctrl/Cmd+Click to select several.</p>
+
+            {/* Current extra images grid */}
+            {(form.imageUrls ?? []).length > 0 && (
+              <div className="mt-3 flex flex-wrap gap-2">
+                {(form.imageUrls as string[]).map((url: string, idx: number) => (
+                  <div key={idx} className="relative group">
+                    <img src={url} alt={`Image ${idx + 1}`} className="h-16 w-16 rounded-lg object-cover border border-border" />
+                    <button
+                      type="button"
+                      onClick={() => removeExtraImage(idx)}
+                      className="absolute -top-1.5 -right-1.5 h-5 w-5 rounded-full bg-destructive text-white text-xs flex items-center justify-center opacity-0 group-hover:opacity-100 transition"
+                      aria-label="Remove image"
+                    >
+                      ×
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Active toggle */}
+          <label className="col-span-2 flex items-center gap-2 text-sm">
+            <Switch checked={form.isActive} onCheckedChange={(v) => upd("isActive", v)} /> Active
+          </label>
+
+          <div className="col-span-2 flex justify-end gap-2">
+            <button type="button" onClick={onClose} className="btn-outline-primary text-sm px-4 py-2">Cancel</button>
+            <button className="btn-primary text-sm px-4 py-2">Save</button>
+          </div>
+        </form>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// ─── Categories (read from real API, write via existing public categories) ─
+function CategoriesPage() {
+  const [cats, setCats] = useState<ApiCategory[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    getCategories().then(setCats).catch((e) => toast.error(e.message)).finally(() => setLoading(false));
+  }, []);
+
+  return (
+    <DashCard>
+      {loading ? <Spinner /> : (
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead><tr className="text-left text-text-secondary border-b border-border">
-              <th className="py-2 pr-3">Image</th><th className="py-2 pr-3">Name</th><th className="py-2 pr-3">SKU</th>
-              <th className="py-2 pr-3">Category</th><th className="py-2 pr-3">Price</th><th className="py-2 pr-3">Stock</th>
-              <th className="py-2 pr-3">Status</th><th className="py-2">Actions</th>
+              <th className="py-2 pr-3">Name</th><th className="py-2 pr-3">Slug</th><th className="py-2">Products</th>
             </tr></thead>
-            <tbody>
-              {filtered.map((p) => (
-                <tr key={p.id} className="border-b border-border">
-                  <td className="py-3 pr-3"><img src={p.images[0]} alt="" className="h-10 w-10 rounded object-cover" /></td>
-                  <td className="py-3 pr-3 font-medium max-w-[240px] truncate">{p.name}</td>
-                  <td className="py-3 pr-3 font-mono text-xs">{p.sku}</td>
-                  <td className="py-3 pr-3">{p.category}</td>
-                  <td className="py-3 pr-3 font-semibold">${p.price}</td>
-                  <td className="py-3 pr-3">{p.inStock ? "In stock" : "Out"}</td>
-                  <td className="py-3 pr-3"><Switch checked={p.inStock} onCheckedChange={(v) => setItems((prev) => prev.map((x) => x.id === p.id ? { ...x, inStock: v } : x))} /></td>
-                  <td className="py-3"><div className="flex gap-1">
-                    <button onClick={() => setEditing(p)} className="p-1.5 hover:bg-muted rounded" aria-label="Edit"><Pencil className="h-4 w-4" /></button>
-                    <button onClick={() => setToDelete(p.id)} className="p-1.5 hover:bg-muted rounded text-destructive" aria-label="Delete"><Trash2 className="h-4 w-4" /></button>
-                  </div></td>
-                </tr>
-              ))}
-            </tbody>
+            <tbody>{cats.map((c) => (
+              <tr key={c.id} className="border-b border-border">
+                <td className="py-3 pr-3 font-medium">{c.name}</td>
+                <td className="py-3 pr-3 font-mono text-xs">{c.slug}</td>
+                <td className="py-3">{c.productCount}</td>
+              </tr>
+            ))}</tbody>
           </table>
         </div>
+      )}
+    </DashCard>
+  );
+}
+
+// ─── Customers ─────────────────────────────────────────────────────────────
+function CustomersPage() {
+  const [customers, setCustomers] = useState<AdminCustomer[]>([]);
+  const [total, setTotal]         = useState(0);
+  const [loading, setLoading]     = useState(true);
+  const [q, setQ]                 = useState("");
+  const [detail, setDetail]       = useState<{ customer: AdminCustomer; orders: any[] } | null>(null);
+  const [detailLoading, setDetailLoading] = useState(false);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      const res = await adminGetCustomers({ search: q || undefined, limit: 100 });
+      setCustomers(res.customers); setTotal(res.total);
+    } catch (e: any) { toast.error(e.message); }
+    finally { setLoading(false); }
+  }, [q]);
+
+  useEffect(() => { load(); }, []);
+
+  const viewCustomer = async (id: string) => {
+    setDetailLoading(true);
+    try {
+      const res = await adminGetCustomerById(id);
+      setDetail(res as any);
+    } catch (e: any) { toast.error(e.message); }
+    finally { setDetailLoading(false); }
+  };
+
+  return (
+    <div className="space-y-4">
+      <DashCard>
+        <div className="flex gap-3 items-center mb-4">
+          <div className="relative flex-1 max-w-sm">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-text-secondary" />
+            <input value={q} onChange={(e) => setQ(e.target.value)} onKeyDown={(e) => e.key === "Enter" && load()} placeholder="Search customers" className="w-full pl-9 pr-3 py-2 rounded-lg border border-border text-sm focus:outline-none focus:border-primary" />
+          </div>
+        </div>
+        {loading ? <Spinner /> : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead><tr className="text-left text-text-secondary border-b border-border">
+                <th className="py-2 pr-3">Name</th><th className="py-2 pr-3">Email</th>
+                <th className="py-2 pr-3">Orders</th><th className="py-2 pr-3">Total Spent</th>
+                <th className="py-2 pr-3">Joined</th><th className="py-2"></th>
+              </tr></thead>
+              <tbody>{customers.map((c) => (
+                <tr key={c.id} className="border-b border-border">
+                  <td className="py-3 pr-3 font-medium">{c.firstName} {c.lastName}</td>
+                  <td className="py-3 pr-3 text-text-secondary">{c.email}</td>
+                  <td className="py-3 pr-3">{c.ordersCount}</td>
+                  <td className="py-3 pr-3 font-semibold">${c.totalSpent.toFixed(2)}</td>
+                  <td className="py-3 pr-3">{c.createdAt.slice(0,10)}</td>
+                  <td className="py-3"><button onClick={() => viewCustomer(c.id)} className="text-primary hover:underline text-sm">View</button></td>
+                </tr>
+              ))}</tbody>
+            </table>
+            <p className="text-xs text-text-secondary mt-3">Showing {customers.length} of {total}</p>
+          </div>
+        )}
+      </DashCard>
+      <Dialog open={!!detail || detailLoading} onOpenChange={(v) => !v && setDetail(null)}>
+        <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
+          {detailLoading ? <Spinner /> : detail && (
+            <>
+              <DialogHeader><DialogTitle>{detail.customer.firstName} {detail.customer.lastName}</DialogTitle></DialogHeader>
+              <div className="space-y-4 text-sm">
+                <div className="grid grid-cols-3 gap-3">
+                  <div className="p-3 bg-muted rounded-lg"><p className="text-xs text-text-secondary">Orders</p><p className="font-bold text-lg">{detail.customer.ordersCount}</p></div>
+                  <div className="p-3 bg-muted rounded-lg"><p className="text-xs text-text-secondary">Total Spent</p><p className="font-bold text-lg">${detail.customer.totalSpent.toFixed(2)}</p></div>
+                  <div className="p-3 bg-muted rounded-lg"><p className="text-xs text-text-secondary">Joined</p><p className="font-bold text-base">{detail.customer.createdAt.slice(0,10)}</p></div>
+                </div>
+                <p className="text-text-secondary">{detail.customer.email}</p>
+                {detail.orders.length > 0 && (
+                  <div>
+                    <p className="font-semibold mb-2">Order History</p>
+                    <table className="w-full text-xs">
+                      <thead><tr className="text-left text-text-secondary border-b border-border"><th className="py-2">Order #</th><th className="py-2">Date</th><th className="py-2">Status</th><th className="py-2">Total</th></tr></thead>
+                      <tbody>{detail.orders.slice(0,10).map((o: any) => (
+                        <tr key={o.id} className="border-b border-border"><td className="py-2 font-mono">{o.order_number}</td><td className="py-2">{o.created_at?.slice(0,10)}</td><td className="py-2 capitalize">{o.status}</td><td className="py-2 font-semibold">${Number(o.total).toFixed(2)}</td></tr>
+                      ))}</tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+            </>
+          )}
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}
+
+// ─── Managers ──────────────────────────────────────────────────────────────
+function ManagersPage() {
+  const [staff, setStaff]     = useState<AdminStaffMember[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [adding, setAdding]   = useState(false);
+  const [toDelete, setToDelete] = useState<string | null>(null);
+  const [form, setForm]       = useState({ firstName: "", lastName: "", email: "", password: "" });
+
+  useEffect(() => {
+    adminGetStaff().then((r) => setStaff(r.staff)).catch((e) => toast.error(e.message)).finally(() => setLoading(false));
+  }, []);
+
+  const addManager = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      const res = await adminCreateStaff({ ...form, role: "store_manager" });
+      setStaff((p) => [...p, res.staff]);
+      toast.success("Store manager added");
+      setForm({ firstName: "", lastName: "", email: "", password: "" });
+      setAdding(false);
+    } catch (err: any) { toast.error(err.message); }
+  };
+
+  const toggle = async (id: string, isActive: boolean) => {
+    try {
+      await adminToggleStaff(id, isActive);
+      setStaff((p) => p.map((s) => s.id === id ? { ...s, isActive } : s));
+    } catch (err: any) { toast.error(err.message); }
+  };
+
+  return (
+    <div className="space-y-4">
+      <DashCard>
+        <div className="flex justify-end mb-4">
+          <button onClick={() => setAdding(true)} className="btn-primary text-sm flex items-center gap-1"><Plus className="h-4 w-4" /> Add Store Manager</button>
+        </div>
+        {loading ? <Spinner /> : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead><tr className="text-left text-text-secondary border-b border-border">
+                <th className="py-2 pr-3">Name</th><th className="py-2 pr-3">Email</th>
+                <th className="py-2 pr-3">Role</th><th className="py-2 pr-3">Active</th>
+                <th className="py-2 pr-3">Added</th><th className="py-2">Actions</th>
+              </tr></thead>
+              <tbody>{staff.map((m) => (
+                <tr key={m.id} className="border-b border-border">
+                  <td className="py-3 pr-3 font-medium">{m.firstName} {m.lastName}</td>
+                  <td className="py-3 pr-3 text-text-secondary">{m.email}</td>
+                  <td className="py-3 pr-3 capitalize">{m.role.replace("_", " ")}</td>
+                  <td className="py-3 pr-3"><Switch checked={m.isActive} onCheckedChange={(v) => toggle(m.id, v)} /></td>
+                  <td className="py-3 pr-3">{m.createdAt.slice(0,10)}</td>
+                  <td className="py-3">
+                    {m.role !== "admin" && (
+                      <button onClick={() => setToDelete(m.id)} className="text-destructive hover:underline text-sm flex items-center gap-1"><Trash2 className="h-3.5 w-3.5" /> Remove</button>
+                    )}
+                  </td>
+                </tr>
+              ))}</tbody>
+            </table>
+          </div>
+        )}
       </DashCard>
 
-      <ProductDialog open={!!editing || adding} onClose={() => { setEditing(null); setAdding(false); }} initial={editing} onSave={save} categories={cats.filter((c) => c !== "All")} />
+      <Dialog open={adding} onOpenChange={setAdding}>
+        <DialogContent>
+          <DialogHeader><DialogTitle>Add Store Manager</DialogTitle></DialogHeader>
+          <form onSubmit={addManager} className="space-y-3">
+            <div><label className="block text-xs font-medium mb-1">First Name</label><input required value={form.firstName} onChange={(e) => setForm({ ...form, firstName: e.target.value })} className="w-full px-3 py-2 rounded-lg border border-border text-sm" /></div>
+            <div><label className="block text-xs font-medium mb-1">Last Name</label><input required value={form.lastName} onChange={(e) => setForm({ ...form, lastName: e.target.value })} className="w-full px-3 py-2 rounded-lg border border-border text-sm" /></div>
+            <div><label className="block text-xs font-medium mb-1">Email</label><input required type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} className="w-full px-3 py-2 rounded-lg border border-border text-sm" /></div>
+            <div><label className="block text-xs font-medium mb-1">Temporary Password</label><input required type="password" autoComplete="new-password" minLength={8} value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} className="w-full px-3 py-2 rounded-lg border border-border text-sm" /></div>
+            <div className="flex justify-end gap-2"><button type="button" onClick={() => setAdding(false)} className="btn-outline-primary text-sm px-4 py-2">Cancel</button><button className="btn-primary text-sm px-4 py-2">Add</button></div>
+          </form>
+        </DialogContent>
+      </Dialog>
 
       <AlertDialog open={!!toDelete} onOpenChange={(v) => !v && setToDelete(null)}>
         <AlertDialogContent>
-          <AlertDialogHeader><AlertDialogTitle>Delete product?</AlertDialogTitle><AlertDialogDescription>This action cannot be undone.</AlertDialogDescription></AlertDialogHeader>
+          <AlertDialogHeader><AlertDialogTitle>Remove store manager?</AlertDialogTitle><AlertDialogDescription>Their account will be deactivated.</AlertDialogDescription></AlertDialogHeader>
           <AlertDialogFooter><AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={() => { setItems((p) => p.filter((x) => x.id !== toDelete)); toast.success("Deleted"); setToDelete(null); }}>Delete</AlertDialogAction>
+            <AlertDialogAction onClick={async () => { if (toDelete) { await adminToggleStaff(toDelete, false); setStaff((p) => p.filter((s) => s.id !== toDelete)); toast.success("Removed"); setToDelete(null); } }}>Remove</AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
@@ -367,184 +960,872 @@ function ProductsPage() {
   );
 }
 
-function ProductDialog({ open, onClose, initial, onSave, categories }: { open: boolean; onClose: () => void; initial: Product | null; onSave: (p: Product) => void; categories: string[] }) {
-  const blank: Product = { id: `p${Date.now()}`, slug: "", name: "", shortDescription: "", description: "", price: 0, salePrice: null, category: categories[0] ?? "", images: [""], inStock: true, rating: 0, reviewCount: 0, sku: "", brand: "CutHaven", attributes: {}, tags: [] };
-  const [form, setForm] = useState<Product>(initial ?? blank);
-  const upd = (k: keyof Product, v: any) => setForm((f) => ({ ...f, [k]: v }));
-  const genSlug = (name: string) => name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
-  return (
-    <Dialog open={open} onOpenChange={(v) => { if (!v) onClose(); }}>
-      <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
-        <DialogHeader><DialogTitle>{initial ? "Edit Product" : "Add Product"}</DialogTitle></DialogHeader>
-        <form onSubmit={(e) => { e.preventDefault(); onSave({ ...form, slug: form.slug || genSlug(form.name), images: [form.images[0] || "https://placehold.co/800x800/2D6A4F/FAFAF7?text=Product"] }); }} className="grid grid-cols-2 gap-3">
-          <div className="col-span-2"><label className="block text-xs font-medium mb-1">Name</label><input required value={form.name} onChange={(e) => upd("name", e.target.value)} className="w-full px-3 py-2 rounded-lg border border-border text-sm" /></div>
-          <div><label className="block text-xs font-medium mb-1">Slug</label><input value={form.slug} onChange={(e) => upd("slug", e.target.value)} placeholder={genSlug(form.name)} className="w-full px-3 py-2 rounded-lg border border-border text-sm" /></div>
-          <div><label className="block text-xs font-medium mb-1">SKU</label><input required value={form.sku} onChange={(e) => upd("sku", e.target.value)} className="w-full px-3 py-2 rounded-lg border border-border text-sm" /></div>
-          <div><label className="block text-xs font-medium mb-1">Category</label><select value={form.category} onChange={(e) => upd("category", e.target.value)} className="w-full px-3 py-2 rounded-lg border border-border text-sm bg-surface">{categories.map((c) => <option key={c}>{c}</option>)}</select></div>
-          <div><label className="block text-xs font-medium mb-1">Price</label><input required type="number" value={form.price} onChange={(e) => upd("price", +e.target.value)} className="w-full px-3 py-2 rounded-lg border border-border text-sm" /></div>
-          <div><label className="block text-xs font-medium mb-1">Sale Price</label><input type="number" value={form.salePrice ?? ""} onChange={(e) => upd("salePrice", e.target.value ? +e.target.value : null)} className="w-full px-3 py-2 rounded-lg border border-border text-sm" /></div>
-          <div><label className="block text-xs font-medium mb-1">Stock Qty</label><input type="number" defaultValue={10} className="w-full px-3 py-2 rounded-lg border border-border text-sm" /></div>
-          <div className="col-span-2"><label className="block text-xs font-medium mb-1">Description</label><textarea rows={3} value={form.description} onChange={(e) => upd("description", e.target.value)} className="w-full px-3 py-2 rounded-lg border border-border text-sm" /></div>
-          <div className="col-span-2"><label className="block text-xs font-medium mb-1">Image URL</label><input value={form.images[0]} onChange={(e) => upd("images", [e.target.value])} placeholder="https://..." className="w-full px-3 py-2 rounded-lg border border-border text-sm" />{form.images[0] && <img src={form.images[0]} alt="" className="mt-2 h-20 w-20 rounded object-cover border border-border" />}</div>
-          <label className="col-span-2 flex items-center gap-2 text-sm"><Switch checked={form.inStock} onCheckedChange={(v) => upd("inStock", v)} /> Active</label>
-          <div className="col-span-2 flex justify-end gap-2"><button type="button" onClick={onClose} className="btn-outline-primary text-sm px-4 py-2">Cancel</button><button className="btn-primary text-sm px-4 py-2">Save</button></div>
-        </form>
-      </DialogContent>
-    </Dialog>
-  );
-}
-
-// ---- Categories ----
-function CategoriesPage() {
-  const [items, setItems] = useState<Category[]>(seedCats);
-  const [editing, setEditing] = useState<Category | null>(null);
-  const [adding, setAdding] = useState(false);
+// ─── Blog management ───────────────────────────────────────────────────────
+function BlogPage() {
+  const [posts, setPosts]     = useState<BlogPost[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [editing, setEditing] = useState<BlogPost | null>(null);
+  const [adding, setAdding]   = useState(false);
   const [toDelete, setToDelete] = useState<string | null>(null);
-  const counts = useMemo(() => Object.fromEntries(items.map((c) => [c.name, seedProducts.filter((p) => p.category === c.name).length])), [items]);
-  const save = (c: Category) => { setItems((prev) => prev.some((x) => x.id === c.id) ? prev.map((x) => x.id === c.id ? c : x) : [...prev, c]); toast.success("Category saved"); setEditing(null); setAdding(false); };
+
+  useEffect(() => {
+    adminGetBlogPosts()
+      .then((r) => setPosts(r.posts))
+      .catch((e) => toast.error(e.message))
+      .finally(() => setLoading(false));
+  }, []);
+
+  const handleTogglePublish = async (post: BlogPost) => {
+    try {
+      const res = await adminUpdateBlogPost(post.id, { isPublished: !post.isPublished });
+      setPosts((p) => p.map((x) => x.id === post.id ? res.post : x));
+      toast.success(!post.isPublished ? "Post published" : "Post set to draft");
+    } catch (e: any) { toast.error(e.message); }
+  };
+
+  const handleDelete = async (id: string) => {
+    try {
+      await adminDeleteBlogPost(id);
+      setPosts((p) => p.filter((x) => x.id !== id));
+      toast.success("Post deleted");
+      setToDelete(null);
+    } catch (e: any) { toast.error(e.message); }
+  };
+
+  const onSaved = (post: BlogPost, isNew: boolean) => {
+    setPosts((p) => isNew ? [post, ...p] : p.map((x) => x.id === post.id ? post : x));
+    setAdding(false);
+    setEditing(null);
+    toast.success(isNew ? "Post created" : "Post updated");
+  };
+
   return (
     <div className="space-y-4">
       <DashCard>
-        <div className="flex justify-end mb-4"><button onClick={() => setAdding(true)} className="btn-primary text-sm flex items-center gap-1"><Plus className="h-4 w-4" /> Add Category</button></div>
-        <div className="overflow-x-auto"><table className="w-full text-sm">
-          <thead><tr className="text-left text-text-secondary border-b border-border"><th className="py-2 pr-3">Image</th><th className="py-2 pr-3">Name</th><th className="py-2 pr-3">Slug</th><th className="py-2 pr-3">Products</th><th className="py-2">Actions</th></tr></thead>
-          <tbody>{items.map((c) => (
-            <tr key={c.id} className="border-b border-border">
-              <td className="py-3 pr-3"><img src={c.image} alt="" className="h-10 w-10 rounded object-cover" /></td>
-              <td className="py-3 pr-3 font-medium">{c.name}</td>
-              <td className="py-3 pr-3 font-mono text-xs">{c.slug}</td>
-              <td className="py-3 pr-3">{counts[c.name] ?? 0}</td>
-              <td className="py-3"><div className="flex gap-1"><button onClick={() => setEditing(c)} className="p-1.5 hover:bg-muted rounded"><Pencil className="h-4 w-4" /></button><button onClick={() => setToDelete(c.id)} className="p-1.5 hover:bg-muted rounded text-destructive"><Trash2 className="h-4 w-4" /></button></div></td>
-            </tr>))}</tbody>
-        </table></div>
+        <div className="flex justify-between items-center mb-4">
+          <p className="text-sm text-text-secondary">{posts.length} post{posts.length !== 1 ? "s" : ""}</p>
+          <button onClick={() => setAdding(true)} className="btn-primary text-sm flex items-center gap-1">
+            <Plus className="h-4 w-4" /> New Post
+          </button>
+        </div>
+
+        {loading ? <Spinner /> : posts.length === 0 ? (
+          <div className="py-12 text-center">
+            <BookOpen className="h-10 w-10 text-text-secondary mx-auto mb-3" />
+            <p className="text-sm text-text-secondary">No posts yet. Create your first blog post.</p>
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="text-left text-text-secondary border-b border-border">
+                  <th className="py-2 pr-3">Title</th>
+                  <th className="py-2 pr-3">Category</th>
+                  <th className="py-2 pr-3">Author</th>
+                  <th className="py-2 pr-3">Read Time</th>
+                  <th className="py-2 pr-3">Published</th>
+                  <th className="py-2 pr-3">Status</th>
+                  <th className="py-2">Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {posts.map((p) => (
+                  <tr key={p.id} className="border-b border-border">
+                    <td className="py-3 pr-3 font-medium max-w-[260px]">
+                      <p className="truncate">{p.title}</p>
+                      <p className="text-xs text-text-secondary font-mono">{p.slug}</p>
+                    </td>
+                    <td className="py-3 pr-3">{p.category}</td>
+                    <td className="py-3 pr-3">{p.author}</td>
+                    <td className="py-3 pr-3">{p.readTime}</td>
+                    <td className="py-3 pr-3 text-xs">
+                      {p.publishedAt
+                        ? new Date(p.publishedAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })
+                        : "—"}
+                    </td>
+                    <td className="py-3 pr-3">
+                      <Switch
+                        checked={p.isPublished}
+                        onCheckedChange={() => handleTogglePublish(p)}
+                      />
+                    </td>
+                    <td className="py-3">
+                      <div className="flex gap-1">
+                        <button onClick={() => setEditing(p)} className="p-1.5 hover:bg-muted rounded">
+                          <Pencil className="h-4 w-4" />
+                        </button>
+                        <button onClick={() => setToDelete(p.id)} className="p-1.5 hover:bg-muted rounded text-destructive">
+                          <Trash2 className="h-4 w-4" />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </DashCard>
-      <CategoryDialog open={!!editing || adding} onClose={() => { setEditing(null); setAdding(false); }} initial={editing} onSave={save} />
+
+      <BlogPostDialog
+        open={adding || !!editing}
+        onClose={() => { setAdding(false); setEditing(null); }}
+        initial={editing}
+        onSaved={onSaved}
+      />
+
       <AlertDialog open={!!toDelete} onOpenChange={(v) => !v && setToDelete(null)}>
-        <AlertDialogContent><AlertDialogHeader><AlertDialogTitle>Delete category?</AlertDialogTitle></AlertDialogHeader>
-          <AlertDialogFooter><AlertDialogCancel>Cancel</AlertDialogCancel><AlertDialogAction onClick={() => { setItems((p) => p.filter((x) => x.id !== toDelete)); toast.success("Deleted"); setToDelete(null); }}>Delete</AlertDialogAction></AlertDialogFooter>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete this post?</AlertDialogTitle>
+            <AlertDialogDescription>This cannot be undone. The post will be permanently removed.</AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={() => toDelete && handleDelete(toDelete)}>Delete</AlertDialogAction>
+          </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
     </div>
   );
 }
 
-function CategoryDialog({ open, onClose, initial, onSave }: { open: boolean; onClose: () => void; initial: Category | null; onSave: (c: Category) => void }) {
-  const blank: Category = { id: `cat${Date.now()}`, name: "", slug: "", count: 0, image: "https://placehold.co/200x200/2D6A4F/FAFAF7?text=Cat", description: "" };
-  const [form, setForm] = useState<Category>(initial ?? blank);
-  const genSlug = (n: string) => n.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+function BlogPostDialog({ open, onClose, initial, onSaved }: {
+  open: boolean;
+  onClose: () => void;
+  initial: BlogPost | null;
+  onSaved: (post: BlogPost, isNew: boolean) => void;
+}) {
+  const blank = {
+    title: "", slug: "", excerpt: "", content: "",
+    category: "General", author: "CutHaven Team",
+    imageUrl: "", readTime: "5 min read", isPublished: false,
+  };
+  const [form, setForm] = useState<any>({ ...blank });
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    if (open) {
+      setForm(initial ? {
+        title:       initial.title,
+        slug:        initial.slug,
+        excerpt:     initial.excerpt,
+        content:     initial.content,
+        category:    initial.category,
+        author:      initial.author,
+        imageUrl:    initial.imageUrl ?? "",
+        readTime:    initial.readTime,
+        isPublished: initial.isPublished,
+      } : { ...blank });
+    }
+  }, [open, initial]);
+
+  const upd = (k: string, v: any) => setForm((f: any) => ({ ...f, [k]: v }));
+  const genSlug = (t: string) => t.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!form.title.trim() || !form.excerpt.trim() || !form.content.trim()) {
+      toast.error("Title, excerpt and content are required"); return;
+    }
+    setSaving(true);
+    try {
+      const payload = {
+        ...form,
+        slug:     form.slug.trim() || genSlug(form.title),
+        imageUrl: form.imageUrl.trim() || null,
+      };
+      if (initial) {
+        const res = await adminUpdateBlogPost(initial.id, payload);
+        onSaved(res.post, false);
+      } else {
+        const res = await adminCreateBlogPost(payload);
+        onSaved(res.post, true);
+      }
+    } catch (e: any) { toast.error(e.message); }
+    finally { setSaving(false); }
+  };
+
   return (
     <Dialog open={open} onOpenChange={(v) => { if (!v) onClose(); }}>
-      <DialogContent><DialogHeader><DialogTitle>{initial ? "Edit Category" : "Add Category"}</DialogTitle></DialogHeader>
-        <form onSubmit={(e) => { e.preventDefault(); onSave({ ...form, slug: form.slug || genSlug(form.name) }); }} className="space-y-3">
-          <div><label className="block text-xs font-medium mb-1">Name</label><input required value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} className="w-full px-3 py-2 rounded-lg border border-border text-sm" /></div>
-          <div><label className="block text-xs font-medium mb-1">Slug</label><input value={form.slug} onChange={(e) => setForm({ ...form, slug: e.target.value })} placeholder={genSlug(form.name)} className="w-full px-3 py-2 rounded-lg border border-border text-sm" /></div>
-          <div><label className="block text-xs font-medium mb-1">Image URL</label><input value={form.image} onChange={(e) => setForm({ ...form, image: e.target.value })} className="w-full px-3 py-2 rounded-lg border border-border text-sm" /></div>
-          <div><label className="block text-xs font-medium mb-1">Description</label><textarea rows={2} value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} className="w-full px-3 py-2 rounded-lg border border-border text-sm" /></div>
-          <div className="flex justify-end gap-2"><button type="button" onClick={onClose} className="btn-outline-primary text-sm px-4 py-2">Cancel</button><button className="btn-primary text-sm px-4 py-2">Save</button></div>
-        </form>
-      </DialogContent>
-    </Dialog>
-  );
-}
-
-// ---- Customers ----
-function CustomersPage() {
-  const [q, setQ] = useState(""); const [view, setView] = useState<string | null>(null);
-  const filtered = customers.filter((c) => q === "" || c.name.toLowerCase().includes(q.toLowerCase()) || c.email.toLowerCase().includes(q.toLowerCase()));
-  const cust = view ? customers.find((c) => c.id === view) : null;
-  return (
-    <div className="space-y-4">
-      <DashCard>
-        <div className="relative mb-4 max-w-sm"><Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-text-secondary" />
-          <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search customers" className="w-full pl-9 pr-3 py-2 rounded-lg border border-border text-sm focus:outline-none focus:border-primary" /></div>
-        <div className="overflow-x-auto"><table className="w-full text-sm">
-          <thead><tr className="text-left text-text-secondary border-b border-border"><th className="py-2 pr-3">Name</th><th className="py-2 pr-3">Email</th><th className="py-2 pr-3">Role</th><th className="py-2 pr-3">Orders</th><th className="py-2 pr-3">Total Spent</th><th className="py-2 pr-3">Joined</th><th className="py-2"></th></tr></thead>
-          <tbody>{filtered.map((c) => (
-            <tr key={c.id} className="border-b border-border">
-              <td className="py-3 pr-3 font-medium">{c.name}</td><td className="py-3 pr-3 text-text-secondary">{c.email}</td>
-              <td className="py-3 pr-3"><span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${c.role === "VIP" ? "bg-accent/10 text-accent" : "bg-muted"}`}>{c.role}</span></td>
-              <td className="py-3 pr-3">{c.ordersCount}</td><td className="py-3 pr-3 font-semibold">${c.totalSpent.toFixed(2)}</td>
-              <td className="py-3 pr-3">{c.joinedDate}</td>
-              <td className="py-3"><button onClick={() => setView(c.id)} className="text-primary hover:underline text-sm">View</button></td>
-            </tr>))}</tbody>
-        </table></div>
-      </DashCard>
-      <Dialog open={!!cust} onOpenChange={(v) => !v && setView(null)}>
-        <DialogContent className="max-w-2xl">{cust && (<>
-          <DialogHeader><DialogTitle>{cust.name}</DialogTitle></DialogHeader>
-          <div className="space-y-3 text-sm">
-            <div className="grid grid-cols-3 gap-3">
-              <div className="p-3 bg-muted rounded-lg"><p className="text-xs text-text-secondary">Orders</p><p className="font-bold text-lg">{cust.ordersCount}</p></div>
-              <div className="p-3 bg-muted rounded-lg"><p className="text-xs text-text-secondary">Total Spent</p><p className="font-bold text-lg">${cust.totalSpent.toFixed(2)}</p></div>
-              <div className="p-3 bg-muted rounded-lg"><p className="text-xs text-text-secondary">Joined</p><p className="font-bold text-lg">{cust.joinedDate}</p></div>
+      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle>{initial ? "Edit Post" : "New Blog Post"}</DialogTitle>
+        </DialogHeader>
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div>
+            <label className="block text-xs font-medium mb-1">Title *</label>
+            <input required value={form.title} onChange={(e) => upd("title", e.target.value)}
+              className="w-full px-3 py-2 rounded-lg border border-border text-sm focus:outline-none focus:border-primary" />
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-medium mb-1">Slug</label>
+              <input value={form.slug} onChange={(e) => upd("slug", e.target.value)}
+                placeholder={genSlug(form.title) || "auto-generated"}
+                className="w-full px-3 py-2 rounded-lg border border-border text-sm font-mono focus:outline-none focus:border-primary" />
             </div>
-            <p className="text-text-secondary">{cust.email}</p>
-            <div><p className="font-semibold mb-2">Order History</p>
-              <table className="w-full text-xs">
-                <thead><tr className="text-left text-text-secondary border-b border-border"><th className="py-2">Order #</th><th className="py-2">Date</th><th className="py-2">Status</th><th className="py-2">Total</th></tr></thead>
-                <tbody>{mockOrders.filter((o) => o.email === cust.email).slice(0, 5).map((o) => (
-                  <tr key={o.id} className="border-b border-border"><td className="py-2 font-mono">{o.id}</td><td className="py-2">{o.date}</td><td className="py-2"><StatusBadge status={o.status} /></td><td className="py-2 font-semibold">${o.total.toFixed(2)}</td></tr>
-                ))}</tbody>
-              </table>
+            <div>
+              <label className="block text-xs font-medium mb-1">Category</label>
+              <input value={form.category} onChange={(e) => upd("category", e.target.value)}
+                className="w-full px-3 py-2 rounded-lg border border-border text-sm focus:outline-none focus:border-primary" />
             </div>
           </div>
-        </>)}</DialogContent>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-medium mb-1">Author</label>
+              <input value={form.author} onChange={(e) => upd("author", e.target.value)}
+                className="w-full px-3 py-2 rounded-lg border border-border text-sm focus:outline-none focus:border-primary" />
+            </div>
+            <div>
+              <label className="block text-xs font-medium mb-1">Read Time</label>
+              <input value={form.readTime} onChange={(e) => upd("readTime", e.target.value)}
+                placeholder="e.g. 5 min read"
+                className="w-full px-3 py-2 rounded-lg border border-border text-sm focus:outline-none focus:border-primary" />
+            </div>
+          </div>
+          <div>
+            <label className="block text-xs font-medium mb-1">Image URL</label>
+            <input value={form.imageUrl} onChange={(e) => upd("imageUrl", e.target.value)}
+              placeholder="https://..."
+              className="w-full px-3 py-2 rounded-lg border border-border text-sm focus:outline-none focus:border-primary" />
+            {form.imageUrl && (
+              <img src={form.imageUrl} alt="" className="mt-2 h-24 w-full object-cover rounded-lg border border-border" />
+            )}
+          </div>
+          <div>
+            <label className="block text-xs font-medium mb-1">Excerpt * <span className="text-text-secondary">(shown on blog listing)</span></label>
+            <textarea required rows={2} value={form.excerpt} onChange={(e) => upd("excerpt", e.target.value)}
+              className="w-full px-3 py-2 rounded-lg border border-border text-sm focus:outline-none focus:border-primary resize-none" />
+          </div>
+          <div>
+            <label className="block text-xs font-medium mb-1">Content * <span className="text-text-secondary">(separate paragraphs with a blank line)</span></label>
+            <textarea required rows={10} value={form.content} onChange={(e) => upd("content", e.target.value)}
+              className="w-full px-3 py-2 rounded-lg border border-border text-sm focus:outline-none focus:border-primary" />
+          </div>
+          <label className="flex items-center gap-2 text-sm cursor-pointer">
+            <Switch checked={form.isPublished} onCheckedChange={(v) => upd("isPublished", v)} />
+            Publish immediately
+          </label>
+          <div className="flex justify-end gap-2 pt-1">
+            <button type="button" onClick={onClose} className="btn-outline-primary text-sm px-4 py-2">Cancel</button>
+            <button disabled={saving} className="btn-primary text-sm px-4 py-2">
+              {saving ? "Saving…" : initial ? "Save Changes" : "Create Post"}
+            </button>
+          </div>
+        </form>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// ─── Reviews moderation ────────────────────────────────────────────────────
+function ReviewsPage() {
+  const [reviews, setReviews]   = useState<AdminReview[]>([]);
+  const [loading, setLoading]   = useState(true);
+  const [filter, setFilter]     = useState<"all" | "pending" | "approved">("pending");
+  const [detail, setDetail]     = useState<AdminReview | null>(null);
+
+  const load = useCallback(async (f: typeof filter) => {
+    setLoading(true);
+    try {
+      const qs = f === "all" ? "" : `?approved=${f === "approved"}`;
+      const data = await adminFetch<{ reviews: AdminReview[] }>(`/admin/reviews${qs}`);
+      setReviews(data.reviews);
+    } catch (e: any) { toast.error(e.message); }
+    finally { setLoading(false); }
+  }, []);
+
+  useEffect(() => { load(filter); }, [filter, load]);
+
+  const moderate = async (id: string, isApproved: boolean) => {
+    try {
+      await adminFetch(`/admin/reviews/${id}`, {
+        method: "PATCH",
+        body: JSON.stringify({ isApproved }),
+      });
+      setReviews((prev) => prev.map((r) => r.id === id ? { ...r, is_approved: isApproved } : r));
+      if (detail?.id === id) setDetail((d) => d ? { ...d, is_approved: isApproved } : d);
+      toast.success(isApproved ? "Review approved — now visible on product page" : "Review rejected");
+    } catch (e: any) { toast.error(e.message); }
+  };
+
+  const tabs: { key: typeof filter; label: string }[] = [
+    { key: "pending",  label: "Pending Approval" },
+    { key: "approved", label: "Approved" },
+    { key: "all",      label: "All" },
+  ];
+
+  const pendingCount = reviews.filter((r) => !r.is_approved).length;
+
+  return (
+    <div className="space-y-4">
+      <DashCard>
+        {/* Filter tabs */}
+        <div className="flex gap-1.5 mb-5 flex-wrap">
+          {tabs.map((t) => (
+            <button
+              key={t.key}
+              onClick={() => setFilter(t.key)}
+              className={`px-4 py-1.5 rounded-full text-xs font-semibold transition ${
+                filter === t.key
+                  ? "bg-primary text-primary-foreground"
+                  : "bg-muted hover:bg-primary/10"
+              }`}
+            >
+              {t.label}
+              {t.key === "pending" && pendingCount > 0 && filter !== "pending" && (
+                <span className="ml-1.5 inline-flex items-center justify-center h-4 w-4 rounded-full bg-destructive text-white text-[10px]">
+                  {pendingCount}
+                </span>
+              )}
+            </button>
+          ))}
+        </div>
+
+        {loading ? <Spinner /> : reviews.length === 0 ? (
+          <div className="py-12 text-center">
+            <Star className="h-10 w-10 text-text-secondary mx-auto mb-3" />
+            <p className="text-sm text-text-secondary">
+              {filter === "pending" ? "No reviews awaiting approval." : "No reviews found."}
+            </p>
+          </div>
+        ) : (
+          <div className="space-y-3">
+            {reviews.map((r) => {
+              const reviewer = r.customers
+                ? `${r.customers.first_name} ${r.customers.last_name}`
+                : "Unknown";
+              const productName = r.products?.name ?? "Unknown product";
+
+              return (
+                <div
+                  key={r.id}
+                  className={`rounded-xl border p-4 transition ${
+                    r.is_approved ? "border-border bg-surface" : "border-warning/30 bg-warning/5"
+                  }`}
+                >
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    {/* Left — reviewer + product + stars */}
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <p className="font-semibold text-sm">{reviewer}</p>
+                        {r.is_verified_purchase && (
+                          <span className="inline-flex items-center gap-1 text-xs text-success font-medium">
+                            <CheckCircle2 className="h-3 w-3" /> Verified Purchase
+                          </span>
+                        )}
+                        <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
+                          r.is_approved
+                            ? "bg-success/10 text-success"
+                            : "bg-warning/20 text-warning-foreground"
+                        }`}>
+                          {r.is_approved ? "Approved" : "Pending"}
+                        </span>
+                      </div>
+                      <p className="text-xs text-text-secondary mt-0.5">
+                        {r.customers?.email ?? ""} · {productName}
+                      </p>
+
+                      {/* Star rating */}
+                      <div className="flex gap-0.5 mt-2">
+                        {[1,2,3,4,5].map((n) => (
+                          <Star
+                            key={n}
+                            className={`h-3.5 w-3.5 ${n <= r.rating ? "fill-warning text-warning" : "text-border"}`}
+                          />
+                        ))}
+                        <span className="text-xs text-text-secondary ml-1">{r.rating}/5</span>
+                      </div>
+
+                      {/* Review text */}
+                      {r.review_text && (
+                        <p className="mt-2 text-sm text-text-secondary leading-relaxed line-clamp-3">
+                          "{r.review_text}"
+                        </p>
+                      )}
+
+                      {/* FTC flags */}
+                      {r.disclosed_incentive && (
+                        <p className="mt-1 text-xs text-warning">⚠ Reviewer disclosed an incentive</p>
+                      )}
+                      {r.insider_relationship && (
+                        <p className="mt-0.5 text-xs text-warning">⚠ Insider relationship: {r.insider_relationship}</p>
+                      )}
+
+                      <p className="text-xs text-text-secondary mt-2">
+                        {new Date(r.created_at).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
+                      </p>
+                    </div>
+
+                    {/* Right — action buttons */}
+                    <div className="flex flex-col gap-2 shrink-0">
+                      <button
+                        onClick={() => setDetail(r)}
+                        className="text-xs text-primary hover:underline flex items-center gap-1"
+                      >
+                        <Eye className="h-3.5 w-3.5" /> Full review
+                      </button>
+                      {!r.is_approved ? (
+                        <button
+                          onClick={() => moderate(r.id, true)}
+                          className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-success/10 text-success text-xs font-semibold hover:bg-success/20 transition"
+                        >
+                          <CheckCircle2 className="h-3.5 w-3.5" /> Approve
+                        </button>
+                      ) : (
+                        <button
+                          onClick={() => moderate(r.id, false)}
+                          className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-destructive/10 text-destructive text-xs font-semibold hover:bg-destructive/20 transition"
+                        >
+                          <XCircle className="h-3.5 w-3.5" /> Reject
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </DashCard>
+
+      {/* Full review detail modal */}
+      <Dialog open={!!detail} onOpenChange={(v) => !v && setDetail(null)}>
+        <DialogContent className="max-w-lg">
+          {detail && (
+            <>
+              <DialogHeader>
+                <DialogTitle>Review by {detail.customers ? `${detail.customers.first_name} ${detail.customers.last_name}` : "Unknown"}</DialogTitle>
+              </DialogHeader>
+              <div className="space-y-4 text-sm">
+                {/* Product */}
+                <div className="rounded-lg bg-muted/40 px-4 py-3">
+                  <p className="text-xs text-text-secondary uppercase tracking-widest mb-1">Product</p>
+                  <p className="font-semibold">{detail.products?.name ?? "Unknown"}</p>
+                  {detail.products?.slug && (
+                    <a
+                      href={`/product/${detail.products.slug}`}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="text-xs text-primary hover:underline"
+                    >
+                      View product →
+                    </a>
+                  )}
+                </div>
+
+                {/* Reviewer */}
+                <div>
+                  <p className="text-xs text-text-secondary">Reviewer</p>
+                  <p className="font-medium">{detail.customers?.first_name} {detail.customers?.last_name}</p>
+                  <p className="text-text-secondary text-xs">{detail.customers?.email}</p>
+                </div>
+
+                {/* Stars */}
+                <div className="flex gap-0.5 items-center">
+                  {[1,2,3,4,5].map((n) => (
+                    <Star key={n} className={`h-5 w-5 ${n <= detail.rating ? "fill-warning text-warning" : "text-border"}`} />
+                  ))}
+                  <span className="text-sm font-semibold ml-2">{detail.rating} / 5</span>
+                </div>
+
+                {/* Full text */}
+                {detail.review_text ? (
+                  <div className="rounded-lg border border-border bg-surface p-4">
+                    <p className="text-sm leading-relaxed">{detail.review_text}</p>
+                  </div>
+                ) : (
+                  <p className="text-text-secondary text-sm italic">No written review — rating only.</p>
+                )}
+
+                {/* Flags */}
+                <div className="space-y-1">
+                  <p className="flex items-center gap-2 text-xs">
+                    {detail.is_verified_purchase
+                      ? <><CheckCircle2 className="h-3.5 w-3.5 text-success" /><span className="text-success">Verified purchase</span></>
+                      : <><XCircle className="h-3.5 w-3.5 text-text-secondary" /><span className="text-text-secondary">Not verified</span></>
+                    }
+                  </p>
+                  {detail.disclosed_incentive && (
+                    <p className="text-xs text-warning">⚠ Reviewer disclosed receiving an incentive</p>
+                  )}
+                  {detail.insider_relationship && (
+                    <p className="text-xs text-warning">⚠ Insider relationship: {detail.insider_relationship}</p>
+                  )}
+                </div>
+
+                {/* Actions */}
+                <div className="flex gap-3 pt-2 border-t border-border">
+                  {!detail.is_approved ? (
+                    <button
+                      onClick={() => moderate(detail.id, true)}
+                      className="flex-1 inline-flex items-center justify-center gap-2 px-4 py-2 rounded-lg bg-success text-white text-sm font-semibold hover:bg-success/90 transition"
+                    >
+                      <CheckCircle2 className="h-4 w-4" /> Approve Review
+                    </button>
+                  ) : (
+                    <button
+                      onClick={() => moderate(detail.id, false)}
+                      className="flex-1 inline-flex items-center justify-center gap-2 px-4 py-2 rounded-lg bg-destructive text-white text-sm font-semibold hover:bg-destructive/90 transition"
+                    >
+                      <XCircle className="h-4 w-4" /> Reject Review
+                    </button>
+                  )}
+                  <button onClick={() => setDetail(null)} className="btn-outline-primary text-sm px-4 py-2">
+                    Close
+                  </button>
+                </div>
+              </div>
+            </>
+          )}
+        </DialogContent>
       </Dialog>
     </div>
   );
 }
 
-// ---- Store Managers ----
-function ManagersPage() {
-  const [items, setItems] = useState<StoreManager[]>(seedSMs);
-  const [adding, setAdding] = useState(false);
+// ─── Coupons ───────────────────────────────────────────────────────────────
+function CouponsPage() {
+  const [coupons, setCoupons] = useState<AdminCoupon[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [adding, setAdding]   = useState(false);
+  const [editing, setEditing] = useState<AdminCoupon | null>(null);
   const [toDelete, setToDelete] = useState<string | null>(null);
-  const [form, setForm] = useState({ name: "", email: "", password: "" });
+
+  useEffect(() => {
+    adminGetCoupons()
+      .then((r) => setCoupons(r.coupons))
+      .catch((e) => toast.error(e.message))
+      .finally(() => setLoading(false));
+  }, []);
+
+  const handleDelete = async (id: string) => {
+    try {
+      await adminDeleteCoupon(id);
+      setCoupons((p) => p.filter((c) => c.id !== id));
+      toast.success("Coupon deleted");
+      setToDelete(null);
+    } catch (e: any) { toast.error(e.message); }
+  };
+
+  const handleToggle = async (c: AdminCoupon) => {
+    try {
+      const res = await adminUpdateCoupon(c.id, { isActive: !c.is_active });
+      setCoupons((p) => p.map((x) => x.id === c.id ? res.coupon : x));
+    } catch (e: any) { toast.error(e.message); }
+  };
+
+  const onSaved = (coupon: AdminCoupon, isNew: boolean) => {
+    setCoupons((p) => isNew ? [coupon, ...p] : p.map((x) => x.id === coupon.id ? coupon : x));
+    setAdding(false);
+    setEditing(null);
+    toast.success(isNew ? "Coupon created" : "Coupon updated");
+  };
+
   return (
     <div className="space-y-4">
       <DashCard>
-        <div className="flex justify-end mb-4"><button onClick={() => setAdding(true)} className="btn-primary text-sm flex items-center gap-1"><Plus className="h-4 w-4" /> Add Store Manager</button></div>
-        <div className="overflow-x-auto"><table className="w-full text-sm">
-          <thead><tr className="text-left text-text-secondary border-b border-border"><th className="py-2 pr-3">Name</th><th className="py-2 pr-3">Email</th><th className="py-2 pr-3">Status</th><th className="py-2 pr-3">Added</th><th className="py-2">Actions</th></tr></thead>
-          <tbody>{items.map((m) => (
-            <tr key={m.id} className="border-b border-border">
-              <td className="py-3 pr-3 font-medium">{m.name}</td><td className="py-3 pr-3 text-text-secondary">{m.email}</td>
-              <td className="py-3 pr-3"><Switch checked={m.active} onCheckedChange={(v) => setItems((p) => p.map((x) => x.id === m.id ? { ...x, active: v } : x))} /></td>
-              <td className="py-3 pr-3">{m.addedDate}</td>
-              <td className="py-3"><button onClick={() => setToDelete(m.id)} className="text-destructive hover:underline text-sm flex items-center gap-1"><Trash2 className="h-3.5 w-3.5" /> Remove</button></td>
-            </tr>))}</tbody>
-        </table></div>
+        <div className="flex justify-between items-center mb-4">
+          <p className="text-sm text-text-secondary">{coupons.length} coupon{coupons.length !== 1 ? "s" : ""}</p>
+          <button onClick={() => setAdding(true)} className="btn-primary text-sm flex items-center gap-1">
+            <Plus className="h-4 w-4" /> Create Coupon
+          </button>
+        </div>
+
+        {loading ? <Spinner /> : coupons.length === 0 ? (
+          <div className="py-12 text-center">
+            <Tag className="h-10 w-10 text-text-secondary mx-auto mb-3" />
+            <p className="text-text-secondary text-sm">No coupons yet. Create one to get started.</p>
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="text-left text-text-secondary border-b border-border">
+                  <th className="py-2 pr-3">Code</th>
+                  <th className="py-2 pr-3">Type</th>
+                  <th className="py-2 pr-3">Value</th>
+                  <th className="py-2 pr-3">Min Order</th>
+                  <th className="py-2 pr-3">Uses</th>
+                  <th className="py-2 pr-3">Expires</th>
+                  <th className="py-2 pr-3">Active</th>
+                  <th className="py-2">Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {coupons.map((c) => (
+                  <tr key={c.id} className="border-b border-border">
+                    <td className="py-3 pr-3 font-mono font-semibold">{c.code}</td>
+                    <td className="py-3 pr-3 capitalize">{c.discount_type === "percentage" ? "%" : "$"} off</td>
+                    <td className="py-3 pr-3 font-semibold text-accent">
+                      {c.discount_type === "percentage"
+                        ? `${c.discount_value}%`
+                        : `$${c.discount_value.toFixed(2)}`}
+                    </td>
+                    <td className="py-3 pr-3">
+                      {c.min_order_amount ? `$${Number(c.min_order_amount).toFixed(2)}` : "—"}
+                    </td>
+                    <td className="py-3 pr-3">
+                      {c.used_count}
+                      {c.max_uses ? ` / ${c.max_uses}` : " / ∞"}
+                    </td>
+                    <td className="py-3 pr-3">
+                      {c.valid_until ? new Date(c.valid_until).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) : "No expiry"}
+                    </td>
+                    <td className="py-3 pr-3">
+                      <Switch checked={c.is_active} onCheckedChange={() => handleToggle(c)} />
+                    </td>
+                    <td className="py-3">
+                      <div className="flex gap-1">
+                        <button onClick={() => setEditing(c)} className="p-1.5 hover:bg-muted rounded" aria-label="Edit">
+                          <Pencil className="h-4 w-4" />
+                        </button>
+                        <button onClick={() => setToDelete(c.id)} className="p-1.5 hover:bg-muted rounded text-destructive" aria-label="Delete">
+                          <Trash2 className="h-4 w-4" />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </DashCard>
-      <Dialog open={adding} onOpenChange={setAdding}>
-        <DialogContent><DialogHeader><DialogTitle>Add Store Manager</DialogTitle></DialogHeader>
-          <form onSubmit={(e) => { e.preventDefault(); setItems((p) => [...p, { id: `sm${Date.now()}`, name: form.name, email: form.email, active: true, addedDate: new Date().toISOString().slice(0, 10) }]); toast.success("Manager added"); setForm({ name: "", email: "", password: "" }); setAdding(false); }} className="space-y-3">
-            <div><label className="block text-xs font-medium mb-1">Name</label><input required value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} className="w-full px-3 py-2 rounded-lg border border-border text-sm" /></div>
-            <div><label className="block text-xs font-medium mb-1">Email</label><input required type="email" autoComplete="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} className="w-full px-3 py-2 rounded-lg border border-border text-sm" /></div>
-            <div><label className="block text-xs font-medium mb-1">Temporary Password</label><input required type="password" autoComplete="new-password" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} className="w-full px-3 py-2 rounded-lg border border-border text-sm" /></div>
-            <div className="flex justify-end gap-2"><button type="button" onClick={() => setAdding(false)} className="btn-outline-primary text-sm px-4 py-2">Cancel</button><button className="btn-primary text-sm px-4 py-2">Add</button></div>
-          </form>
-        </DialogContent>
-      </Dialog>
+
+      {/* Create / Edit dialog */}
+      <CouponDialog
+        open={adding || !!editing}
+        onClose={() => { setAdding(false); setEditing(null); }}
+        initial={editing}
+        onSaved={onSaved}
+      />
+
+      {/* Delete confirmation */}
       <AlertDialog open={!!toDelete} onOpenChange={(v) => !v && setToDelete(null)}>
-        <AlertDialogContent><AlertDialogHeader><AlertDialogTitle>Remove store manager?</AlertDialogTitle></AlertDialogHeader>
-          <AlertDialogFooter><AlertDialogCancel>Cancel</AlertDialogCancel><AlertDialogAction onClick={() => { setItems((p) => p.filter((x) => x.id !== toDelete)); toast.success("Removed"); setToDelete(null); }}>Remove</AlertDialogAction></AlertDialogFooter>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete coupon?</AlertDialogTitle>
+            <AlertDialogDescription>This cannot be undone. Existing orders that used this coupon are unaffected.</AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={() => toDelete && handleDelete(toDelete)}>Delete</AlertDialogAction>
+          </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
     </div>
   );
 }
 
-// ---- Settings ----
+function CouponDialog({ open, onClose, initial, onSaved }: {
+  open: boolean;
+  onClose: () => void;
+  initial: AdminCoupon | null;
+  onSaved: (coupon: AdminCoupon, isNew: boolean) => void;
+}) {
+  const blank = {
+    code: "", discountType: "percentage" as "percentage" | "fixed",
+    discountValue: 10, minOrderAmount: "", maxUses: "", validUntil: "", isActive: true,
+  };
+  const [form, setForm] = useState({ ...blank });
+  const [saving, setSaving] = useState(false);
+
+  // Reset form whenever dialog opens with a different initial value
+  useEffect(() => {
+    if (open) {
+      setForm(initial ? {
+        code:            initial.code,
+        discountType:    initial.discount_type,
+        discountValue:   initial.discount_value,
+        minOrderAmount:  initial.min_order_amount != null ? String(initial.min_order_amount) : "",
+        maxUses:         initial.max_uses != null ? String(initial.max_uses) : "",
+        validUntil:      initial.valid_until ? initial.valid_until.slice(0, 10) : "",
+        isActive:        initial.is_active,
+      } : { ...blank });
+    }
+  }, [open, initial]);
+
+  const upd = (k: keyof typeof form, v: any) => setForm((f) => ({ ...f, [k]: v }));
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!form.code.trim()) { toast.error("Code is required"); return; }
+    if (form.discountValue <= 0) { toast.error("Discount value must be positive"); return; }
+    if (form.discountType === "percentage" && form.discountValue > 100) {
+      toast.error("Percentage discount cannot exceed 100"); return;
+    }
+
+    setSaving(true);
+    try {
+      const payload = {
+        code:               form.code.trim().toUpperCase(),
+        discountType:       form.discountType,
+        discountValue:      Number(form.discountValue),
+        minOrderAmount:     form.minOrderAmount ? Number(form.minOrderAmount) : null,
+        maxUses:            form.maxUses ? Number(form.maxUses) : null,
+        validUntil:         form.validUntil ? new Date(form.validUntil + "T23:59:59Z").toISOString() : null,
+        isActive:           form.isActive,
+      };
+
+      if (initial) {
+        const res = await adminUpdateCoupon(initial.id, payload);
+        onSaved(res.coupon, false);
+      } else {
+        const res = await adminCreateCoupon(payload);
+        onSaved(res.coupon, true);
+      }
+    } catch (e: any) {
+      toast.error(e.message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={(v) => { if (!v) onClose(); }}>
+      <DialogContent className="max-w-lg">
+        <DialogHeader>
+          <DialogTitle>{initial ? "Edit Coupon" : "Create Coupon"}</DialogTitle>
+        </DialogHeader>
+        <form onSubmit={handleSubmit} className="space-y-4">
+
+          {/* Code */}
+          <div>
+            <label className="block text-xs font-medium mb-1">
+              Coupon Code <span className="text-destructive">*</span>
+            </label>
+            <input
+              value={form.code}
+              onChange={(e) => upd("code", e.target.value.toUpperCase())}
+              placeholder="e.g. SAVE20"
+              className="w-full px-3 py-2 rounded-lg border border-border text-sm font-mono focus:outline-none focus:border-primary"
+              required
+            />
+            <p className="text-xs text-text-secondary mt-1">Customers enter this at checkout. Automatically uppercased.</p>
+          </div>
+
+          {/* Discount type + value */}
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-medium mb-1">Discount Type <span className="text-destructive">*</span></label>
+              <select
+                value={form.discountType}
+                onChange={(e) => upd("discountType", e.target.value)}
+                className="w-full px-3 py-2 rounded-lg border border-border text-sm bg-surface focus:outline-none focus:border-primary"
+              >
+                <option value="percentage">Percentage (%)</option>
+                <option value="fixed">Fixed Amount ($)</option>
+              </select>
+            </div>
+            <div>
+              <label className="block text-xs font-medium mb-1">
+                Value <span className="text-destructive">*</span>
+                <span className="text-text-secondary ml-1">
+                  ({form.discountType === "percentage" ? "e.g. 20 = 20% off" : "e.g. 15 = $15 off"})
+                </span>
+              </label>
+              <input
+                type="number"
+                step="0.01"
+                min="0.01"
+                max={form.discountType === "percentage" ? 100 : undefined}
+                value={form.discountValue}
+                onChange={(e) => upd("discountValue", e.target.value)}
+                className="w-full px-3 py-2 rounded-lg border border-border text-sm focus:outline-none focus:border-primary"
+                required
+              />
+            </div>
+          </div>
+
+          {/* Min order + max uses */}
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-medium mb-1">Min. Order Amount ($)</label>
+              <input
+                type="number"
+                step="0.01"
+                min="0"
+                value={form.minOrderAmount}
+                onChange={(e) => upd("minOrderAmount", e.target.value)}
+                placeholder="No minimum"
+                className="w-full px-3 py-2 rounded-lg border border-border text-sm focus:outline-none focus:border-primary"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-medium mb-1">Max Uses</label>
+              <input
+                type="number"
+                step="1"
+                min="1"
+                value={form.maxUses}
+                onChange={(e) => upd("maxUses", e.target.value)}
+                placeholder="Unlimited"
+                className="w-full px-3 py-2 rounded-lg border border-border text-sm focus:outline-none focus:border-primary"
+              />
+            </div>
+          </div>
+
+          {/* Expiry */}
+          <div>
+            <label className="block text-xs font-medium mb-1">Expiry Date</label>
+            <input
+              type="date"
+              value={form.validUntil}
+              onChange={(e) => upd("validUntil", e.target.value)}
+              min={new Date().toISOString().slice(0, 10)}
+              className="w-full px-3 py-2 rounded-lg border border-border text-sm focus:outline-none focus:border-primary"
+            />
+            <p className="text-xs text-text-secondary mt-1">Leave empty for no expiry.</p>
+          </div>
+
+          {/* Active toggle */}
+          <label className="flex items-center gap-2 text-sm cursor-pointer">
+            <Switch checked={form.isActive} onCheckedChange={(v) => upd("isActive", v)} />
+            Active — customers can use this coupon
+          </label>
+
+          {/* Preview */}
+          {form.code && form.discountValue > 0 && (
+            <div className="rounded-lg bg-success/10 border border-success/20 px-4 py-3 text-sm">
+              <p className="font-semibold text-success">Preview</p>
+              <p className="text-text-secondary mt-0.5">
+                Code <span className="font-mono font-bold">{form.code.toUpperCase()}</span> gives{" "}
+                {form.discountType === "percentage"
+                  ? `${form.discountValue}% off`
+                  : `$${Number(form.discountValue).toFixed(2)} off`}
+                {form.minOrderAmount ? ` on orders over $${form.minOrderAmount}` : ""}
+                {form.maxUses ? ` · ${form.maxUses} total uses` : " · unlimited uses"}
+                {form.validUntil ? ` · expires ${new Date(form.validUntil).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}` : ""}
+              </p>
+            </div>
+          )}
+
+          <div className="flex justify-end gap-2 pt-1">
+            <button type="button" onClick={onClose} className="btn-outline-primary text-sm px-4 py-2">
+              Cancel
+            </button>
+            <button className="btn-primary text-sm px-4 py-2" disabled={saving}>
+              {saving ? "Saving…" : initial ? "Save Changes" : "Create Coupon"}
+            </button>
+          </div>
+        </form>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// ─── Settings (local UI only — no DB-backed settings table yet) ────────────
 function SettingsPage() {
   const [store, setStore] = useState({ name: "CutHaven", email: "support@cuthaven.com", phone: "+1 406 229-9045", address: "1633 S Industrial Way, Palmer, AK 99645" });
-  const [ship, setShip] = useState({ freeThreshold: 350, flatRate: 12.99 });
+  const [ship, setShip]   = useState({ freeThreshold: 350, flatRate: 9.99 });
   const [notif, setNotif] = useState({ newOrder: true, lowStock: true, weekly: false });
-  const [clearOpen, setClearOpen] = useState(false);
   return (
     <div className="space-y-4">
       <DashCard>
         <h3 className="font-display text-lg font-bold mb-4">Store Information</h3>
-        <form onSubmit={(e) => { e.preventDefault(); toast.success("Store info saved"); }} className="grid md:grid-cols-2 gap-3">
+        <form onSubmit={(e) => { e.preventDefault(); toast.success("Saved (UI only — backend settings endpoint coming in a future milestone)"); }} className="grid md:grid-cols-2 gap-3">
           <div><label className="block text-xs font-medium mb-1">Store Name</label><input value={store.name} onChange={(e) => setStore({ ...store, name: e.target.value })} className="w-full px-3 py-2 rounded-lg border border-border text-sm" /></div>
           <div><label className="block text-xs font-medium mb-1">Support Email</label><input type="email" value={store.email} onChange={(e) => setStore({ ...store, email: e.target.value })} className="w-full px-3 py-2 rounded-lg border border-border text-sm" /></div>
           <div><label className="block text-xs font-medium mb-1">Phone</label><input value={store.phone} onChange={(e) => setStore({ ...store, phone: e.target.value })} className="w-full px-3 py-2 rounded-lg border border-border text-sm" /></div>
@@ -554,9 +1835,9 @@ function SettingsPage() {
       </DashCard>
       <DashCard>
         <h3 className="font-display text-lg font-bold mb-4">Shipping</h3>
-        <form onSubmit={(e) => { e.preventDefault(); toast.success("Shipping saved"); }} className="grid md:grid-cols-2 gap-3">
+        <form onSubmit={(e) => { e.preventDefault(); toast.success("Saved"); }} className="grid md:grid-cols-2 gap-3">
           <div><label className="block text-xs font-medium mb-1">Free shipping threshold ($)</label><input type="number" value={ship.freeThreshold} onChange={(e) => setShip({ ...ship, freeThreshold: +e.target.value })} className="w-full px-3 py-2 rounded-lg border border-border text-sm" /></div>
-          <div><label className="block text-xs font-medium mb-1">Flat shipping rate ($)</label><input type="number" step="0.01" value={ship.flatRate} onChange={(e) => setShip({ ...ship, flatRate: +e.target.value })} className="w-full px-3 py-2 rounded-lg border border-border text-sm" /></div>
+          <div><label className="block text-xs font-medium mb-1">Flat rate ($)</label><input type="number" step="0.01" value={ship.flatRate} onChange={(e) => setShip({ ...ship, flatRate: +e.target.value })} className="w-full px-3 py-2 rounded-lg border border-border text-sm" /></div>
           <div className="md:col-span-2 flex justify-end"><button className="btn-primary text-sm px-4 py-2">Save</button></div>
         </form>
       </DashCard>
@@ -564,21 +1845,10 @@ function SettingsPage() {
         <h3 className="font-display text-lg font-bold mb-4">Notifications</h3>
         <div className="space-y-3">
           {[{ k: "newOrder", l: "Email on new order" }, { k: "lowStock", l: "Email on low stock" }, { k: "weekly", l: "Weekly summary" }].map((n) => (
-            <label key={n.k} className="flex items-center justify-between"><span className="text-sm">{n.l}</span>
-              <Switch checked={(notif as any)[n.k]} onCheckedChange={(v) => setNotif({ ...notif, [n.k]: v })} /></label>
+            <label key={n.k} className="flex items-center justify-between"><span className="text-sm">{n.l}</span><Switch checked={(notif as any)[n.k]} onCheckedChange={(v) => setNotif({ ...notif, [n.k]: v })} /></label>
           ))}
         </div>
       </DashCard>
-      <DashCard className="border-destructive/40">
-        <h3 className="font-display text-lg font-bold mb-2 text-destructive">Danger Zone</h3>
-        <p className="text-sm text-text-secondary mb-4">Clear demo data — this is a placeholder and does not delete anything yet.</p>
-        <button onClick={() => setClearOpen(true)} className="text-sm px-4 py-2 rounded-lg border border-destructive text-destructive hover:bg-destructive hover:text-destructive-foreground">Clear demo data</button>
-      </DashCard>
-      <AlertDialog open={clearOpen} onOpenChange={setClearOpen}>
-        <AlertDialogContent><AlertDialogHeader><AlertDialogTitle>Clear demo data?</AlertDialogTitle><AlertDialogDescription>This is a UI placeholder and will not delete anything.</AlertDialogDescription></AlertDialogHeader>
-          <AlertDialogFooter><AlertDialogCancel>Cancel</AlertDialogCancel><AlertDialogAction onClick={() => { toast.success("Demo data cleared (placeholder)"); setClearOpen(false); }}>Clear</AlertDialogAction></AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
     </div>
   );
 }

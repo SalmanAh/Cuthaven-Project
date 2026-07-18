@@ -13,7 +13,7 @@ import {
 export interface AuthUser {
   id: string;
   email: string;
-  role: "customer" | "admin" | "store_manager";
+  role: "customer" | "admin" | "store_manager" | "product_manager";
   firstName: string;
   lastName: string;
 }

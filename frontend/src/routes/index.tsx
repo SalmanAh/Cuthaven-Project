@@ -2,9 +2,9 @@ import { Link, createFileRoute } from "@tanstack/react-router";
 import { ArrowRight, Star, Truck, RotateCcw, ShieldCheck, ShoppingCart } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { ProductCard } from "@/components/ui/ProductCard";
-import { getProducts, getCategories } from "@/lib/api-client";
-import heroTool from "@/assets/hero-tool.png.asset.json";
+import { getProducts, getCategories, submitContact } from "@/lib/api-client";
 import { useState } from "react";
+import { toast } from "sonner";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -29,6 +29,52 @@ export const Route = createFileRoute("/")({
   component: HomePage,
 });
 
+// ─── JSON-LD constants ─────────────────────────────────────────────────────
+
+const STORE_URL = import.meta.env.VITE_STORE_URL ?? "https://www.cuthaven.com";
+
+const organizationJsonLd = {
+  "@context": "https://schema.org",
+  "@type": "Organization",
+  name: "CutHaven",
+  url: STORE_URL,
+  logo: `${STORE_URL}/favicon.ico`,
+  description:
+    "Premium outdoor, garden and workshop tools for the US market. Free shipping over $350, 40-day returns, 12-month warranty.",
+  address: {
+    "@type": "PostalAddress",
+    streetAddress: "1633 S Industrial Way",
+    addressLocality: "Palmer",
+    addressRegion: "AK",
+    postalCode: "99645",
+    addressCountry: "US",
+  },
+  contactPoint: {
+    "@type": "ContactPoint",
+    telephone: "+1-406-229-9045",
+    contactType: "customer service",
+    email: "support@cuthaven.com",
+    availableLanguage: "English",
+    areaServed: "US",
+  },
+  sameAs: [],
+};
+
+const webSiteJsonLd = {
+  "@context": "https://schema.org",
+  "@type": "WebSite",
+  name: "CutHaven",
+  url: STORE_URL,
+  potentialAction: {
+    "@type": "SearchAction",
+    target: {
+      "@type": "EntryPoint",
+      urlTemplate: `${STORE_URL}/shop?q={search_term_string}`,
+    },
+    "query-input": "required name=search_term_string",
+  },
+};
+
 const trustItems = [
   { icon: Truck, title: "Ships within the United States Only", desc: "Fast, tracked delivery from Palmer, AK." },
   { icon: RotateCcw, title: "40-Day Return Window", desc: "No-questions-asked returns on every order." },
@@ -52,6 +98,16 @@ function HomePage() {
 
   return (
     <div className="bg-background">
+      {/* ── JSON-LD structured data ── */}
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(organizationJsonLd) }}
+      />
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(webSiteJsonLd) }}
+      />
+
       {/* ============ HERO ============ */}
       <section className="relative overflow-hidden bg-primary-dark text-primary-foreground">
         {/* Subtle radial glow behind */}
@@ -116,7 +172,7 @@ function HomePage() {
                 }}
               />
               <img
-                src={heroTool.url}
+                src="https://images.unsplash.com/photo-1581244277943-fe4a9c777189?w=900&auto=format&fit=crop&q=80"
                 alt="Premium socket wrench ratchet tool set"
                 width={1200}
                 height={1200}
@@ -308,17 +364,33 @@ function ReviewForm() {
   const [rating, setRating] = useState(0);
   const [hover, setHover] = useState(0);
   const [name, setName] = useState("");
+  const [product, setProduct] = useState("");
   const [review, setReview] = useState("");
   const [submitted, setSubmitted] = useState(false);
+  const [loading, setLoading] = useState(false);
 
-  const onSubmit = (e: React.FormEvent) => {
+  const onSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!rating || !name.trim() || !review.trim()) return;
-    setSubmitted(true);
-    setRating(0);
-    setName("");
-    setReview("");
-    setTimeout(() => setSubmitted(false), 4000);
+    setLoading(true);
+    try {
+      // Homepage reviews go via contact_submissions so they reach the support inbox
+      // and can be manually approved and added to product PDPs by the admin.
+      // Direct product reviews with a productId are submitted on the PDP reviews tab.
+      await submitContact({
+        name: name.trim(),
+        email: "review@cuthaven.com", // placeholder — replaced by admin
+        subject: `Homepage review — ${product.trim() || "General"} — ${rating}/5 stars`,
+        message: `Rating: ${rating}/5\nProduct: ${product.trim() || "Not specified"}\n\nReview:\n${review.trim()}`,
+      });
+      setSubmitted(true);
+      setRating(0); setName(""); setProduct(""); setReview("");
+      setTimeout(() => setSubmitted(false), 5000);
+    } catch (err: any) {
+      toast.error(err.message ?? "Failed to submit. Please try again.");
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -380,6 +452,8 @@ function ReviewForm() {
           />
           <input
             type="text"
+            value={product}
+            onChange={(e) => setProduct(e.target.value)}
             placeholder="Product (optional)"
             className="rounded-xl border border-border bg-background px-4 py-3 text-sm focus:outline-none focus:border-primary"
           />
@@ -394,14 +468,14 @@ function ReviewForm() {
         />
         <div className="flex items-center justify-between gap-4">
           <p className="text-xs text-text-secondary">
-            {submitted ? "Thanks — your review was submitted." : "Reviews are moderated before publishing."}
+            {submitted ? "Thanks — your review was received!" : "Reviews are moderated before publishing."}
           </p>
           <button
             type="submit"
-            className="inline-flex items-center gap-2 rounded-full bg-accent hover:bg-accent-hover text-accent-foreground px-6 py-3 text-sm font-semibold transition"
+            disabled={loading}
+            className="inline-flex items-center gap-2 rounded-full bg-accent hover:bg-accent-hover text-accent-foreground px-6 py-3 text-sm font-semibold transition disabled:opacity-60"
           >
-            Submit Review
-            <ArrowRight className="h-4 w-4" />
+            {loading ? "Submitting…" : <><span>Submit Review</span><ArrowRight className="h-4 w-4" /></>}
           </button>
         </div>
       </form>

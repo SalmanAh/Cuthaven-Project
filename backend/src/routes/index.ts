@@ -5,6 +5,13 @@ import { categoriesRouter } from "./categories.routes.js";
 import { ordersRouter } from "./orders.routes.js";
 import { customersRouter } from "./customers.routes.js";
 import { checkoutRouter } from "./checkout.routes.js";
+import { feedRouter } from "./feed.routes.js";
+import { adminRouter } from "./admin.routes.js";
+import { contactRouter } from "./contact.routes.js";
+import { reviewsRouter } from "./reviews.routes.js";
+import { blogRouter } from "./blog.routes.js";
+import { consentRouter } from "./consent.routes.js";
+import { uploadRouter } from "./upload.routes.js";
 
 export const apiRouter = Router();
 
@@ -14,3 +21,10 @@ apiRouter.use("/categories", categoriesRouter);
 apiRouter.use("/orders", ordersRouter);
 apiRouter.use("/customers", customersRouter);
 apiRouter.use("/checkout", checkoutRouter);
+apiRouter.use("/feed", feedRouter);
+apiRouter.use("/admin", adminRouter);
+apiRouter.use("/contact", contactRouter);
+apiRouter.use("/reviews", reviewsRouter);
+apiRouter.use("/blog", blogRouter);
+apiRouter.use("/consent", consentRouter);
+apiRouter.use("/upload", uploadRouter);

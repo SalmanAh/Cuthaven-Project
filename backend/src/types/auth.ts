@@ -3,7 +3,7 @@
 export interface AuthUser {
   id: string;          // Supabase auth.users UUID
   email: string;
-  role: "customer" | "admin" | "store_manager";
+  role: "customer" | "admin" | "store_manager" | "product_manager";
   firstName: string;
   lastName: string;
 }

@@ -3,6 +3,8 @@ import { useState } from "react";
 import { MapPin, Phone, Mail } from "lucide-react";
 import { PageHero } from "@/components/ui/PageHero";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
+import { submitContact } from "@/lib/api-client";
+import { toast } from "sonner";
 
 export const Route = createFileRoute("/contact-us")({
   head: () => ({
@@ -31,9 +33,30 @@ const faqs = [
 
 function ContactPage() {
   const [sent, setSent] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [form, setForm] = useState({ name: "", email: "", phone: "", subject: "", message: "" });
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoading(true);
+    try {
+      await submitContact({
+        name: form.name, email: form.email,
+        phone: form.phone || undefined, subject: form.subject || undefined,
+        message: form.message,
+      });
+      setSent(true);
+    } catch (err: any) {
+      toast.error(err.message ?? "Failed to send message. Please try again.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const upd = (k: keyof typeof form, v: string) => setForm((f) => ({ ...f, [k]: v }));
   return (
     <div>
-      <PageHero title="Get in Touch" subtitle="We're here to answer all your questions." crumbs={[{ label: "Contact Us" }]} />
+      <PageHero title="Get in Touch" subtitle="We're here to answer all your questions." />
 
       <section className="mx-auto max-w-7xl px-4 py-12 grid md:grid-cols-3 gap-5">
         {[
@@ -54,14 +77,15 @@ function ContactPage() {
           <h2 className="font-display text-2xl font-bold mb-2">Fill out the form</h2>
           <p className="text-sm text-text-secondary mb-5">We're here to answer any questions you may have.</p>
           {sent ? (
-            <div className="rounded-lg bg-success/10 text-success p-4 text-sm">Thanks! We'll be in touch soon.</div>
+            <div className="rounded-lg bg-success/10 text-success p-4 text-sm">Thanks! We'll be in touch within 24 hours.</div>
           ) : (
-            <form className="space-y-4" onSubmit={(e) => { e.preventDefault(); setSent(true); }}>
-              <input required placeholder="Your Name" className="w-full px-3 py-2.5 rounded-lg border border-border focus:outline-none focus:border-primary text-sm" />
-              <input required type="email" placeholder="Your Email" className="w-full px-3 py-2.5 rounded-lg border border-border focus:outline-none focus:border-primary text-sm" />
-              <input placeholder="Subject" className="w-full px-3 py-2.5 rounded-lg border border-border focus:outline-none focus:border-primary text-sm" />
-              <textarea required rows={5} placeholder="Your Message" className="w-full px-3 py-2.5 rounded-lg border border-border focus:outline-none focus:border-primary text-sm" />
-              <button className="btn-primary">Send Message →</button>
+            <form className="space-y-4" onSubmit={handleSubmit}>
+              <input required placeholder="Your Name" value={form.name} onChange={(e) => upd("name", e.target.value)} className="w-full px-3 py-2.5 rounded-lg border border-border focus:outline-none focus:border-primary text-sm" />
+              <input required type="email" placeholder="Your Email" value={form.email} onChange={(e) => upd("email", e.target.value)} className="w-full px-3 py-2.5 rounded-lg border border-border focus:outline-none focus:border-primary text-sm" />
+              <input placeholder="Phone (optional)" value={form.phone} onChange={(e) => upd("phone", e.target.value)} className="w-full px-3 py-2.5 rounded-lg border border-border focus:outline-none focus:border-primary text-sm" />
+              <input placeholder="Subject" value={form.subject} onChange={(e) => upd("subject", e.target.value)} className="w-full px-3 py-2.5 rounded-lg border border-border focus:outline-none focus:border-primary text-sm" />
+              <textarea required rows={5} placeholder="Your Message" value={form.message} onChange={(e) => upd("message", e.target.value)} className="w-full px-3 py-2.5 rounded-lg border border-border focus:outline-none focus:border-primary text-sm" />
+              <button disabled={loading} className="btn-primary disabled:opacity-60">{loading ? "Sending…" : "Send Message →"}</button>
             </form>
           )}
         </div>

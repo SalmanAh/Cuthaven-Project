@@ -1,6 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { Minus, Plus, Trash2, ShoppingBag } from "lucide-react";
-import { useState } from "react";
 import { PageHero } from "@/components/ui/PageHero";
 import { useCart } from "@/context/CartContext";
 
@@ -11,12 +10,14 @@ export const Route = createFileRoute("/cart")({
 
 function CartPage() {
   const { items, subtotal, updateQty, removeItem } = useCart();
-  const [coupon, setCoupon] = useState("");
+
+  const shippingCost = subtotal >= 350 ? 0 : 9.99;
+  const total = subtotal + shippingCost;
 
   if (items.length === 0) {
     return (
       <div>
-        <PageHero title="Your Cart" crumbs={[{ label: "Cart" }]} />
+        <PageHero title="Your Cart" />
         <div className="mx-auto max-w-2xl px-4 py-20 text-center">
           <ShoppingBag className="h-16 w-16 text-primary mx-auto mb-4" />
           <h2 className="font-display text-2xl font-bold">Your cart is empty</h2>
@@ -29,8 +30,10 @@ function CartPage() {
 
   return (
     <div>
-      <PageHero title="Shopping Cart" crumbs={[{ label: "Cart" }]} />
+      <PageHero title="Shopping Cart" />
       <div className="mx-auto max-w-7xl px-4 py-10 grid lg:grid-cols-[1fr_380px] gap-8">
+
+        {/* ── Item list ── */}
         <div className="space-y-4">
           {items.map(({ product, quantity }) => {
             const price = product.salePrice ?? product.price;
@@ -59,24 +62,35 @@ function CartPage() {
           <Link to="/shop" className="inline-flex items-center gap-2 text-sm text-primary hover:underline mt-4">← Continue shopping</Link>
         </div>
 
-        <aside className="card-surface p-6 h-fit lg:sticky lg:top-24">
-          <h3 className="font-display text-xl font-bold mb-4">Order Summary</h3>
+        {/* ── Order summary ── */}
+        <aside className="card-surface p-6 h-fit lg:sticky lg:top-24 space-y-4">
+          <h3 className="font-display text-xl font-bold">Order Summary</h3>
+
           <div className="space-y-2 text-sm border-b border-border pb-4">
-            <div className="flex justify-between"><span className="text-text-secondary">Subtotal</span><span className="font-semibold">${subtotal.toFixed(2)}</span></div>
-            <div className="flex justify-between"><span className="text-text-secondary">Shipping</span><span className="font-semibold text-success">FREE</span></div>
-          </div>
-          <div className="flex justify-between py-4 text-lg">
-            <span className="font-bold">Total</span>
-            <span className="font-bold text-accent">${subtotal.toFixed(2)}</span>
-          </div>
-          <Link to="/checkout" className="btn-primary w-full">Proceed to Checkout →</Link>
-          <div className="mt-6 pt-6 border-t border-border">
-            <p className="text-sm font-semibold mb-2">Coupon code</p>
-            <div className="flex gap-2">
-              <input value={coupon} onChange={(e) => setCoupon(e.target.value)} placeholder="Enter code" className="flex-1 px-3 py-2 rounded-lg border border-border text-sm focus:outline-none focus:border-primary" />
-              <button className="px-4 rounded-lg bg-primary text-primary-foreground text-sm font-semibold">Apply</button>
+            <div className="flex justify-between">
+              <span className="text-text-secondary">Subtotal</span>
+              <span className="font-semibold">${subtotal.toFixed(2)}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-text-secondary">Shipping</span>
+              <span className={shippingCost === 0 ? "text-success font-semibold" : "font-semibold"}>
+                {shippingCost === 0 ? "FREE" : `$${shippingCost.toFixed(2)}`}
+              </span>
             </div>
           </div>
+
+          <div className="flex justify-between text-lg">
+            <span className="font-bold">Total</span>
+            <span className="font-bold text-accent">${total.toFixed(2)}</span>
+          </div>
+
+          <p className="text-xs text-text-secondary">
+            Have a coupon? You can apply it on the next step.
+          </p>
+
+          <Link to="/checkout" className="btn-primary w-full text-center block">
+            Proceed to Checkout →
+          </Link>
         </aside>
       </div>
     </div>

@@ -31,7 +31,7 @@ const why = [
 function AboutPage() {
   return (
     <div>
-      <PageHero title="About Us" subtitle="Quality tools, honest pricing, real support." crumbs={[{ label: "About Us" }]} />
+      <PageHero title="About Us" subtitle="Quality tools, honest pricing, real support." />
 
       <section className="mx-auto max-w-7xl px-4 py-14 grid md:grid-cols-2 gap-10 items-center">
         <div>
