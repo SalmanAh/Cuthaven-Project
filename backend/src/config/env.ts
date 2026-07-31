@@ -19,10 +19,6 @@ const envSchema = z.object({
   // Prod: https://www.cuthaven.com
   STORE_URL: z.string().url().default("http://localhost:8080"),
 
-  // TaxJar — US sales tax calculation. Get from https://app.taxjar.com/api_playground
-  // Optional — if absent, tax defaults to $0 and a warning is logged in production.
-  TAXJAR_API_KEY: z.string().optional(),
-
   // PayPal — required for PayPal checkout. Get from https://developer.paypal.com
   // Use sandbox credentials for development, live credentials for production.
   PAYPAL_CLIENT_ID:     z.string().optional(),
@@ -61,16 +57,6 @@ if (env.NODE_ENV === "production" && !env.RESEND_API_KEY) {
   console.warn(
     "⚠️  RESEND_API_KEY is not set. Order confirmation emails will be skipped. " +
     "Get a key at https://resend.com and add it to your production .env.",
-  );
-}
-
-// In production, warn if TaxJar is not configured — tax will be charged as $0.
-// This is legally acceptable only in states where you have no nexus.
-// You MUST resolve this before going live to avoid under-collecting sales tax.
-if (env.NODE_ENV === "production" && !env.TAXJAR_API_KEY) {
-  console.warn(
-    "⚠️  TAXJAR_API_KEY is not set. Tax will be calculated as $0. " +
-    "Get a key at https://app.taxjar.com and add it to your production .env.",
   );
 }
 

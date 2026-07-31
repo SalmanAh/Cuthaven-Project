@@ -209,7 +209,7 @@ Selection criteria:
 | Store manager dashboard real data | All mock |
 | Email notifications | No order confirmation email — needs Resend/SendGrid integration |
 | Stripe webhook (production) | Works locally via CLI. In production: Stripe Dashboard → Webhooks → point to `https://domain.com/api/checkout/webhook` → save new `STRIPE_WEBHOOK_SECRET` |
-| Tax calculation | `tax_amount: 0` hardcoded. Needs TaxJar/Avalara integration |
+| Tax calculation | ✅ $0 tax (client operates in tax-free jurisdiction) |
 | GMC feed generation | `feed_sync_log` table exists, no code writes to it yet |
 | Merchant API sync | Not started — build against Merchant API v1 (Content API sunsets Aug 18 2026) |
 | JSON-LD structured data | Must be server-rendered on PDPs for Google to crawl |

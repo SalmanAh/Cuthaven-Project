@@ -1,7 +1,7 @@
 import { createFileRoute, useNavigate, Link } from "@tanstack/react-router";
 import { useState, useEffect } from "react";
 import { Lock, ShoppingBag, Tag, X } from "lucide-react";
-import { loadStripe } from "@stripe/stripe-js";
+import { loadStripe, Stripe } from "@stripe/stripe-js";
 import { Elements, PaymentElement, useStripe, useElements } from "@stripe/react-stripe-js";
 import { PayPalButtons, PayPalScriptProvider } from "@paypal/react-paypal-js";
 import { PageHero } from "@/components/ui/PageHero";
@@ -9,13 +9,10 @@ import { useCart } from "@/context/CartContext";
 import { useAuth } from "@/context/AuthContext";
 import {
   createPaymentIntent, createPayPalOrder, capturePayPalOrder, validateCoupon,
-  getMyAddresses, confirmStripeOrder, createCodOrder,
+  getMyAddresses, confirmStripeOrder, createCodOrder, getActiveGatewaysForCheckout,
   type PaymentIntentResponse, type PayPalOrderResponse, type CustomerAddress, type CodOrderResponse,
 } from "@/lib/api-client";
 import { toast } from "sonner";
-
-const stripePromise = loadStripe(import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY ?? "");
-const PAYPAL_CLIENT_ID = import.meta.env.VITE_PAYPAL_CLIENT_ID ?? "";
 
 export const Route = createFileRoute("/checkout")({
   head: () => ({
@@ -98,6 +95,39 @@ function CheckoutPage() {
   const [creatingIntent, setCreatingIntent] = useState(false);
   const [savedAddresses, setSavedAddresses] = useState<CustomerAddress[]>([]);
 
+  // ── Active gateways from database ──────────────────────────────────────
+  const [stripePromise, setStripePromise] = useState<Promise<Stripe | null> | null>(null);
+  const [paypalClientId, setPaypalClientId] = useState<string>("");
+  const [gatewaysLoaded, setGatewaysLoaded] = useState(false);
+
+  // Load active gateways on mount
+  useEffect(() => {
+    getActiveGatewaysForCheckout()
+      .then((gateways) => {
+        if (gateways.stripe?.publishableKey) {
+          setStripePromise(loadStripe(gateways.stripe.publishableKey));
+        }
+        if (gateways.paypal?.clientId) {
+          setPaypalClientId(gateways.paypal.clientId);
+        }
+        setGatewaysLoaded(true);
+
+        // Set default payment method based on what's available
+        if (gateways.stripe) {
+          setPaymentMethod("stripe");
+        } else if (gateways.paypal) {
+          setPaymentMethod("paypal");
+        } else {
+          setPaymentMethod("cod");
+        }
+      })
+      .catch((err) => {
+        console.error("Failed to load payment gateways:", err);
+        toast.error("Failed to load payment options. Please refresh the page.");
+        setGatewaysLoaded(true);
+      });
+  }, []);
+
   // ── Coupon state (lives here now, not on cart page) ──────────────────────
   const [couponInput, setCouponInput] = useState("");
   const [couponLoading, setCouponLoading] = useState(false);
@@ -171,6 +201,15 @@ function CheckoutPage() {
         <h2 className="font-display text-2xl font-bold mb-2">Your cart is empty</h2>
         <p className="text-text-secondary mb-6">Add some tools before checking out.</p>
         <Link to="/shop" className="btn-primary">Shop Now</Link>
+      </div>
+    );
+  }
+
+  // Show loading while fetching gateways
+  if (!gatewaysLoaded) {
+    return (
+      <div className="mx-auto max-w-lg px-4 py-20 text-center">
+        <p className="text-text-secondary">Loading payment options...</p>
       </div>
     );
   }
@@ -314,19 +353,21 @@ function CheckoutPage() {
               <div className="mt-6">
                 <p className="text-sm font-semibold mb-3">Payment Method</p>
                 <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-                  <button
-                    type="button"
-                    onClick={() => setPaymentMethod("stripe")}
-                    className={`flex items-center justify-center gap-2 rounded-xl border-2 py-3 text-sm font-semibold transition ${
-                      paymentMethod === "stripe"
-                        ? "border-primary bg-primary/5 text-primary"
-                        : "border-border text-text-secondary hover:border-primary/40"
-                    }`}
-                  >
-                    <Lock className="h-4 w-4" />
-                    Credit / Debit Card
-                  </button>
-                  {PAYPAL_CLIENT_ID ? (
+                  {stripePromise && (
+                    <button
+                      type="button"
+                      onClick={() => setPaymentMethod("stripe")}
+                      className={`flex items-center justify-center gap-2 rounded-xl border-2 py-3 text-sm font-semibold transition ${
+                        paymentMethod === "stripe"
+                          ? "border-primary bg-primary/5 text-primary"
+                          : "border-border text-text-secondary hover:border-primary/40"
+                      }`}
+                    >
+                      <Lock className="h-4 w-4" />
+                      Credit / Debit Card
+                    </button>
+                  )}
+                  {paypalClientId && (
                     <button
                       type="button"
                       onClick={() => setPaymentMethod("paypal")}
@@ -339,7 +380,7 @@ function CheckoutPage() {
                       <img src="https://www.paypalobjects.com/webstatic/icon/pp258.png" alt="PayPal" className="h-5 w-5" />
                       PayPal
                     </button>
-                  ) : null}
+                  )}
                   <button
                     type="button"
                     onClick={() => setPaymentMethod("cod")}
@@ -356,6 +397,11 @@ function CheckoutPage() {
                 {paymentMethod === "cod" && (
                   <p className="text-xs text-text-secondary mt-2">
                     Pay in cash when your order arrives. Your order is confirmed immediately.
+                  </p>
+                )}
+                {!stripePromise && !paypalClientId && (
+                  <p className="text-xs text-warning mt-2">
+                    Online payment methods are currently unavailable. Only Cash on Delivery is available.
                   </p>
                 )}
               </div>
@@ -419,7 +465,7 @@ function CheckoutPage() {
               </div>
 
               {/* Stripe */}
-              {intentData && (
+              {intentData && stripePromise && (
                 <Elements stripe={stripePromise} options={{ clientSecret: intentData.clientSecret }}>
                   <StripePaymentForm
                     intentData={intentData}
@@ -439,8 +485,8 @@ function CheckoutPage() {
               )}
 
               {/* PayPal */}
-              {paypalData && PAYPAL_CLIENT_ID && (
-                <PayPalScriptProvider options={{ clientId: PAYPAL_CLIENT_ID, currency: "USD" }}>
+              {paypalData && paypalClientId && (
+                <PayPalScriptProvider options={{ clientId: paypalClientId, currency: "USD" }}>
                   <PayPalPaymentForm
                     paypalData={paypalData}
                     onSuccess={(orderId) => {

@@ -871,3 +871,120 @@ export async function adminUpdatePaymentStatus(
     auth: true,
   });
 }
+
+// ─── Payment Gateways (Admin only) ────────────────────────────────────────
+
+export type GatewayType = "stripe" | "paypal";
+export type PayPalMode = "sandbox" | "live";
+
+export interface PaymentGateway {
+  id: string;
+  gatewayType: GatewayType;
+  accountName: string;
+  isActive: boolean;
+  
+  // Masked keys for security
+  stripeSecretKey?: string;
+  stripePublishableKey?: string;
+  stripeWebhookSecret?: string;
+  
+  paypalClientId?: string;
+  paypalClientSecret?: string;
+  paypalMode?: PayPalMode;
+  
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface PaymentGatewayFull {
+  id: string;
+  gatewayType: GatewayType;
+  accountName: string;
+  isActive: boolean;
+  
+  // Full unmasked keys (for edit form)
+  stripeSecretKey?: string;
+  stripePublishableKey?: string;
+  stripeWebhookSecret?: string;
+  
+  paypalClientId?: string;
+  paypalClientSecret?: string;
+  paypalMode?: PayPalMode;
+  
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CreateStripeGateway {
+  gatewayType: "stripe";
+  accountName: string;
+  stripeSecretKey: string;
+  stripePublishableKey: string;
+  stripeWebhookSecret: string;
+  isActive?: boolean;
+}
+
+export interface CreatePayPalGateway {
+  gatewayType: "paypal";
+  accountName: string;
+  paypalClientId: string;
+  paypalClientSecret: string;
+  paypalMode: PayPalMode;
+  isActive?: boolean;
+}
+
+export type CreatePaymentGatewayRequest = CreateStripeGateway | CreatePayPalGateway;
+
+export async function adminGetPaymentGateways(): Promise<PaymentGateway[]> {
+  return request<PaymentGateway[]>("/admin/payment-gateways", { auth: true });
+}
+
+export async function adminGetPaymentGateway(id: string): Promise<PaymentGatewayFull> {
+  return request<PaymentGatewayFull>(`/admin/payment-gateways/${id}`, { auth: true });
+}
+
+export async function adminCreatePaymentGateway(data: CreatePaymentGatewayRequest): Promise<PaymentGateway> {
+  return request<PaymentGateway>("/admin/payment-gateways", {
+    method: "POST",
+    body: data,
+    auth: true,
+  });
+}
+
+export async function adminUpdatePaymentGateway(id: string, data: Partial<CreatePaymentGatewayRequest>): Promise<PaymentGateway> {
+  return request<PaymentGateway>(`/admin/payment-gateways/${id}`, {
+    method: "PUT",
+    body: data,
+    auth: true,
+  });
+}
+
+export async function adminActivatePaymentGateway(id: string): Promise<PaymentGateway> {
+  return request<PaymentGateway>(`/admin/payment-gateways/${id}/activate`, {
+    method: "PATCH",
+    auth: true,
+  });
+}
+
+export async function adminDeletePaymentGateway(id: string): Promise<{ success: boolean; message: string }> {
+  return request<{ success: boolean; message: string }>(`/admin/payment-gateways/${id}`, {
+    method: "DELETE",
+    auth: true,
+  });
+}
+
+// ─── Active Payment Gateways for Checkout (Public) ────────────────────────
+
+export interface ActiveGatewaysForCheckout {
+  stripe?: {
+    publishableKey: string;
+  };
+  paypal?: {
+    clientId: string;
+    mode: PayPalMode;
+  };
+}
+
+export async function getActiveGatewaysForCheckout(): Promise<ActiveGatewaysForCheckout> {
+  return request<ActiveGatewaysForCheckout>("/checkout/active-gateways");
+}

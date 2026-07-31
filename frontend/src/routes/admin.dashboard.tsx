@@ -3,7 +3,7 @@ import { useState, useEffect, useCallback } from "react";
 import {
   LayoutDashboard, Package, ShoppingBag, FolderOpen, Users,
   UserCog, Settings, LogOut, Search, Eye, Pencil, Trash2, Plus,
-  MoreVertical, Tag, Star, CheckCircle2, XCircle, BookOpen,
+  MoreVertical, Tag, Star, CheckCircle2, XCircle, BookOpen, CreditCard,
 } from "lucide-react";
 import {
   AreaChart, Area, BarChart, Bar, PieChart, Pie, Cell,
@@ -28,11 +28,14 @@ import {
   adminGetCoupons, adminCreateCoupon, adminUpdateCoupon, adminDeleteCoupon,
   adminGetBlogPosts, adminCreateBlogPost, adminUpdateBlogPost, adminDeleteBlogPost,
   adminUpdatePaymentStatus,
+  adminGetPaymentGateways, adminGetPaymentGateway, adminCreatePaymentGateway,
+  adminUpdatePaymentGateway, adminActivatePaymentGateway, adminDeletePaymentGateway,
   getCategories,
   type AdminOrder, type AdminProduct, type AdminCustomer,
   type AdminStaffMember, type AdminStats, type AdminRevenueSeries,
   type AdminStatusDistribution, type AdminPeriod, type ApiCategory,
-  type AdminCoupon, type BlogPost,
+  type AdminCoupon, type BlogPost, type PaymentGateway, type PaymentGatewayFull,
+  type CreatePaymentGatewayRequest, type GatewayType, type PayPalMode,
 } from "@/lib/api-client";
 
 // ─── Admin reviews API (not yet in api-client — called directly) ───────────
@@ -67,7 +70,7 @@ interface AdminReview {
   customers: { first_name: string; last_name: string; email: string } | null;
 }
 
-type Tab = "overview" | "orders" | "products" | "categories" | "customers" | "managers" | "coupons" | "reviews" | "blog" | "settings";
+type Tab = "overview" | "orders" | "products" | "categories" | "customers" | "managers" | "coupons" | "gateways" | "reviews" | "blog" | "settings";
 
 export const Route = createFileRoute("/admin/dashboard")({
   head: () => ({ meta: [
@@ -85,17 +88,18 @@ function AdminDashboard() {
   const handleLogout = async () => { await logout(); nav({ to: "/account/login" }); };
 
   const allItems: NavItem[] = [
-    { key: "overview",   label: "Overview",       icon: LayoutDashboard },
-    { key: "orders",     label: "Orders",          icon: Package },
-    { key: "products",   label: "Products",        icon: ShoppingBag },
-    { key: "categories", label: "Categories",      icon: FolderOpen },
-    { key: "customers",  label: "Customers",       icon: Users },
-    { key: "managers",   label: "Store Managers",  icon: UserCog },
-    { key: "coupons",    label: "Coupons",         icon: Tag },
-    { key: "reviews",    label: "Reviews",         icon: Star },
-    { key: "blog",       label: "Blog",            icon: BookOpen },
-    { key: "settings",   label: "Settings",        icon: Settings },
-    { key: "logout",     label: "Logout",          icon: LogOut, onClick: handleLogout },
+    { key: "overview",   label: "Overview",         icon: LayoutDashboard },
+    { key: "orders",     label: "Orders",           icon: Package },
+    { key: "products",   label: "Products",         icon: ShoppingBag },
+    { key: "categories", label: "Categories",       icon: FolderOpen },
+    { key: "customers",  label: "Customers",        icon: Users },
+    { key: "managers",   label: "Store Managers",   icon: UserCog },
+    { key: "coupons",    label: "Coupons",          icon: Tag },
+    { key: "gateways",   label: "Payment Gateways", icon: CreditCard },
+    { key: "reviews",    label: "Reviews",          icon: Star },
+    { key: "blog",       label: "Blog",             icon: BookOpen },
+    { key: "settings",   label: "Settings",         icon: Settings },
+    { key: "logout",     label: "Logout",           icon: LogOut, onClick: handleLogout },
   ];
 
   // Filter sidebar based on role — product_manager only sees: overview, orders, products
@@ -106,7 +110,7 @@ function AdminDashboard() {
   const titles: Record<Tab, string> = {
     overview: "Admin Overview", orders: "Orders", products: "Products",
     categories: "Categories", customers: "Customers", managers: "Store Managers",
-    coupons: "Coupons", reviews: "Reviews", blog: "Blog", settings: "Settings",
+    coupons: "Coupons", gateways: "Payment Gateways", reviews: "Reviews", blog: "Blog", settings: "Settings",
   };
 
   const sidebarTitle = user?.role === "product_manager" ? "Product Manager" : "Admin";
@@ -121,6 +125,7 @@ function AdminDashboard() {
         {tab === "customers"  && <CustomersPage />}
         {tab === "managers"   && <ManagersPage />}
         {tab === "coupons"    && <CouponsPage />}
+        {tab === "gateways"   && <GatewaysPage />}
         {tab === "reviews"    && <ReviewsPage />}
         {tab === "blog"       && <BlogPage />}
         {tab === "settings"   && <SettingsPage />}
@@ -1850,5 +1855,506 @@ function SettingsPage() {
         </div>
       </DashCard>
     </div>
+  );
+}
+
+
+// ─── Payment Gateways ──────────────────────────────────────────────────────
+
+function GatewaysPage() {
+  const [gateways, setGateways] = useState<PaymentGateway[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [showForm, setShowForm] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const data = await adminGetPaymentGateways();
+      setGateways(data);
+    } catch (err: any) {
+      setError(err.message ?? "Failed to load gateways");
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => { load(); }, [load]);
+
+  const handleActivate = async (id: string) => {
+    try {
+      await adminActivatePaymentGateway(id);
+      toast.success("Gateway activated");
+      load();
+    } catch (err: any) {
+      toast.error(err.message ?? "Failed to activate gateway");
+    }
+  };
+
+  const handleDelete = async (id: string) => {
+    try {
+      await adminDeletePaymentGateway(id);
+      toast.success("Gateway deleted");
+      setDeleteConfirm(null);
+      load();
+    } catch (err: any) {
+      toast.error(err.message ?? "Failed to delete gateway");
+    }
+  };
+
+  const openForm = (id?: string) => {
+    setEditingId(id ?? null);
+    setShowForm(true);
+  };
+
+  const closeForm = () => {
+    setShowForm(false);
+    setEditingId(null);
+  };
+
+  const stripeGateways = gateways.filter((g) => g.gatewayType === "stripe");
+  const paypalGateways = gateways.filter((g) => g.gatewayType === "paypal");
+
+  if (loading) return <Spinner />;
+  if (error) return <ErrMsg msg={error} />;
+
+  return (
+    <div className="space-y-6">
+      <div className="flex items-center justify-between">
+        <p className="text-sm text-text-secondary">
+          Manage multiple Stripe and PayPal accounts. Only one per type can be active at a time.
+        </p>
+        <button
+          onClick={() => openForm()}
+          className="btn-primary inline-flex items-center gap-2"
+        >
+          <Plus className="h-4 w-4" />
+          Add Gateway
+        </button>
+      </div>
+
+      {/* Stripe Section */}
+      <DashCard>
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="font-display text-lg font-bold flex items-center gap-2">
+            <CreditCard className="h-5 w-5 text-primary" />
+            Stripe Accounts
+          </h3>
+        </div>
+
+        {stripeGateways.length === 0 ? (
+          <p className="text-sm text-text-secondary py-4 text-center">No Stripe accounts configured</p>
+        ) : (
+          <div className="space-y-3">
+            {stripeGateways.map((g) => (
+              <GatewayCard
+                key={g.id}
+                gateway={g}
+                onActivate={() => handleActivate(g.id)}
+                onEdit={() => openForm(g.id)}
+                onDelete={() => setDeleteConfirm(g.id)}
+              />
+            ))}
+          </div>
+        )}
+      </DashCard>
+
+      {/* PayPal Section */}
+      <DashCard>
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="font-display text-lg font-bold flex items-center gap-2">
+            <CreditCard className="h-5 w-5 text-primary" />
+            PayPal Accounts
+          </h3>
+        </div>
+
+        {paypalGateways.length === 0 ? (
+          <p className="text-sm text-text-secondary py-4 text-center">No PayPal accounts configured</p>
+        ) : (
+          <div className="space-y-3">
+            {paypalGateways.map((g) => (
+              <GatewayCard
+                key={g.id}
+                gateway={g}
+                onActivate={() => handleActivate(g.id)}
+                onEdit={() => openForm(g.id)}
+                onDelete={() => setDeleteConfirm(g.id)}
+              />
+            ))}
+          </div>
+        )}
+      </DashCard>
+
+      {/* Add/Edit Form Dialog */}
+      {showForm && (
+        <GatewayFormDialog
+          gatewayId={editingId}
+          onClose={closeForm}
+          onSuccess={() => { closeForm(); load(); }}
+        />
+      )}
+
+      {/* Delete Confirmation */}
+      <AlertDialog open={!!deleteConfirm} onOpenChange={() => setDeleteConfirm(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Payment Gateway?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will permanently delete this payment gateway. If it's the only active gateway of its type, you cannot delete it.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={() => deleteConfirm && handleDelete(deleteConfirm)} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </div>
+  );
+}
+
+// ─── Gateway Card Component ────────────────────────────────────────────────
+
+interface GatewayCardProps {
+  gateway: PaymentGateway;
+  onActivate: () => void;
+  onEdit: () => void;
+  onDelete: () => void;
+}
+
+function GatewayCard({ gateway, onActivate, onEdit, onDelete }: GatewayCardProps) {
+  const isStripe = gateway.gatewayType === "stripe";
+
+  return (
+    <div className={`rounded-lg border ${gateway.isActive ? "border-primary bg-primary/5" : "border-border bg-surface"} p-4`}>
+      <div className="flex items-start justify-between">
+        <div className="flex-1">
+          <div className="flex items-center gap-3 mb-2">
+            <h4 className="font-semibold">{gateway.accountName}</h4>
+            {gateway.isActive ? (
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-success/10 text-success text-xs font-medium">
+                <CheckCircle2 className="h-3 w-3" /> Active
+              </span>
+            ) : (
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-gray-500/10 text-gray-500 text-xs font-medium">
+                Inactive
+              </span>
+            )}
+          </div>
+
+          <div className="space-y-1 text-sm text-text-secondary">
+            {isStripe ? (
+              <>
+                <p className="font-mono">Secret: {gateway.stripeSecretKey}</p>
+                <p className="font-mono">Publishable: {gateway.stripePublishableKey}</p>
+                <p className="font-mono">Webhook: {gateway.stripeWebhookSecret}</p>
+              </>
+            ) : (
+              <>
+                <p className="font-mono">Client ID: {gateway.paypalClientId}</p>
+                <p className="font-mono">Secret: {gateway.paypalClientSecret}</p>
+                <p className="capitalize">Mode: {gateway.paypalMode}</p>
+              </>
+            )}
+          </div>
+
+          <p className="text-xs text-text-muted mt-2">
+            Created {new Date(gateway.createdAt).toLocaleDateString()}
+          </p>
+        </div>
+
+        <div className="flex items-center gap-2">
+          {!gateway.isActive && (
+            <button
+              onClick={onActivate}
+              className="px-3 py-1.5 text-sm font-medium rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 transition"
+            >
+              Activate
+            </button>
+          )}
+          <button
+            onClick={onEdit}
+            className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 transition"
+            aria-label="Edit"
+          >
+            <Pencil className="h-4 w-4" />
+          </button>
+          <button
+            onClick={onDelete}
+            className="p-2 rounded-lg hover:bg-destructive/10 text-destructive transition"
+            aria-label="Delete"
+          >
+            <Trash2 className="h-4 w-4" />
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Gateway Form Dialog ───────────────────────────────────────────────────
+
+interface GatewayFormDialogProps {
+  gatewayId: string | null;
+  onClose: () => void;
+  onSuccess: () => void;
+}
+
+function GatewayFormDialog({ gatewayId, onClose, onSuccess }: GatewayFormDialogProps) {
+  const [loading, setLoading] = useState(false);
+  const [gatewayType, setGatewayType] = useState<GatewayType>("stripe");
+  const [accountName, setAccountName] = useState("");
+  const [isActive, setIsActive] = useState(false);
+
+  // Stripe fields
+  const [stripeSecretKey, setStripeSecretKey] = useState("");
+  const [stripePublishableKey, setStripePublishableKey] = useState("");
+  const [stripeWebhookSecret, setStripeWebhookSecret] = useState("");
+
+  // PayPal fields
+  const [paypalClientId, setPaypalClientId] = useState("");
+  const [paypalClientSecret, setPaypalClientSecret] = useState("");
+  const [paypalMode, setPaypalMode] = useState<PayPalMode>("live");
+
+  // Load existing gateway for editing
+  useEffect(() => {
+    if (gatewayId) {
+      setLoading(true);
+      adminGetPaymentGateway(gatewayId)
+        .then((g) => {
+          setGatewayType(g.gatewayType);
+          setAccountName(g.accountName);
+          setIsActive(g.isActive);
+
+          if (g.gatewayType === "stripe") {
+            setStripeSecretKey(g.stripeSecretKey ?? "");
+            setStripePublishableKey(g.stripePublishableKey ?? "");
+            setStripeWebhookSecret(g.stripeWebhookSecret ?? "");
+          } else {
+            setPaypalClientId(g.paypalClientId ?? "");
+            setPaypalClientSecret(g.paypalClientSecret ?? "");
+            setPaypalMode((g.paypalMode as PayPalMode) ?? "live");
+          }
+        })
+        .catch((err) => {
+          toast.error(err.message ?? "Failed to load gateway");
+          onClose();
+        })
+        .finally(() => setLoading(false));
+    }
+  }, [gatewayId, onClose]);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoading(true);
+
+    try {
+      const baseData = { accountName, isActive };
+
+      if (gatewayType === "stripe") {
+        const data: CreatePaymentGatewayRequest = {
+          gatewayType: "stripe",
+          ...baseData,
+          stripeSecretKey,
+          stripePublishableKey,
+          stripeWebhookSecret,
+        };
+
+        if (gatewayId) {
+          await adminUpdatePaymentGateway(gatewayId, data);
+          toast.success("Gateway updated");
+        } else {
+          await adminCreatePaymentGateway(data);
+          toast.success("Gateway created");
+        }
+      } else {
+        const data: CreatePaymentGatewayRequest = {
+          gatewayType: "paypal",
+          ...baseData,
+          paypalClientId,
+          paypalClientSecret,
+          paypalMode,
+        };
+
+        if (gatewayId) {
+          await adminUpdatePaymentGateway(gatewayId, data);
+          toast.success("Gateway updated");
+        } else {
+          await adminCreatePaymentGateway(data);
+          toast.success("Gateway created");
+        }
+      }
+
+      onSuccess();
+    } catch (err: any) {
+      toast.error(err.message ?? "Failed to save gateway");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <Dialog open onOpenChange={onClose}>
+      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle>{gatewayId ? "Edit" : "Add"} Payment Gateway</DialogTitle>
+        </DialogHeader>
+
+        <form onSubmit={handleSubmit} className="space-y-4 mt-4">
+          {/* Gateway Type (only for new gateways) */}
+          {!gatewayId && (
+            <div>
+              <label className="block text-sm font-semibold mb-2">Gateway Type</label>
+              <div className="flex gap-4">
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="radio"
+                    value="stripe"
+                    checked={gatewayType === "stripe"}
+                    onChange={(e) => setGatewayType(e.target.value as GatewayType)}
+                    className="accent-primary"
+                  />
+                  <span>Stripe</span>
+                </label>
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="radio"
+                    value="paypal"
+                    checked={gatewayType === "paypal"}
+                    onChange={(e) => setGatewayType(e.target.value as GatewayType)}
+                    className="accent-primary"
+                  />
+                  <span>PayPal</span>
+                </label>
+              </div>
+            </div>
+          )}
+
+          {/* Account Name */}
+          <div>
+            <label className="block text-sm font-semibold mb-2">Account Name</label>
+            <input
+              type="text"
+              value={accountName}
+              onChange={(e) => setAccountName(e.target.value)}
+              placeholder="e.g., Primary Stripe Account"
+              required
+              className="w-full px-3 py-2 rounded-lg border border-border bg-background focus:outline-none focus:border-primary"
+            />
+          </div>
+
+          {/* Stripe Fields */}
+          {gatewayType === "stripe" && (
+            <>
+              <div>
+                <label className="block text-sm font-semibold mb-2">Secret Key</label>
+                <input
+                  type="password"
+                  value={stripeSecretKey}
+                  onChange={(e) => setStripeSecretKey(e.target.value)}
+                  placeholder="sk_live_..."
+                  required
+                  className="w-full px-3 py-2 rounded-lg border border-border bg-background focus:outline-none focus:border-primary font-mono text-sm"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-semibold mb-2">Publishable Key</label>
+                <input
+                  type="text"
+                  value={stripePublishableKey}
+                  onChange={(e) => setStripePublishableKey(e.target.value)}
+                  placeholder="pk_live_..."
+                  required
+                  className="w-full px-3 py-2 rounded-lg border border-border bg-background focus:outline-none focus:border-primary font-mono text-sm"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-semibold mb-2">Webhook Secret</label>
+                <input
+                  type="password"
+                  value={stripeWebhookSecret}
+                  onChange={(e) => setStripeWebhookSecret(e.target.value)}
+                  placeholder="whsec_..."
+                  required
+                  className="w-full px-3 py-2 rounded-lg border border-border bg-background focus:outline-none focus:border-primary font-mono text-sm"
+                />
+              </div>
+            </>
+          )}
+
+          {/* PayPal Fields */}
+          {gatewayType === "paypal" && (
+            <>
+              <div>
+                <label className="block text-sm font-semibold mb-2">Client ID</label>
+                <input
+                  type="text"
+                  value={paypalClientId}
+                  onChange={(e) => setPaypalClientId(e.target.value)}
+                  placeholder="AXxxx..."
+                  required
+                  className="w-full px-3 py-2 rounded-lg border border-border bg-background focus:outline-none focus:border-primary font-mono text-sm"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-semibold mb-2">Client Secret</label>
+                <input
+                  type="password"
+                  value={paypalClientSecret}
+                  onChange={(e) => setPaypalClientSecret(e.target.value)}
+                  placeholder="EYxxx..."
+                  required
+                  className="w-full px-3 py-2 rounded-lg border border-border bg-background focus:outline-none focus:border-primary font-mono text-sm"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-semibold mb-2">Mode</label>
+                <select
+                  value={paypalMode}
+                  onChange={(e) => setPaypalMode(e.target.value as PayPalMode)}
+                  className="w-full px-3 py-2 rounded-lg border border-border bg-background focus:outline-none focus:border-primary"
+                >
+                  <option value="sandbox">Sandbox (Test)</option>
+                  <option value="live">Live (Production)</option>
+                </select>
+              </div>
+            </>
+          )}
+
+          {/* Set as Active */}
+          <div className="flex items-center gap-2">
+            <Switch checked={isActive} onCheckedChange={setIsActive} />
+            <label className="text-sm font-medium">Set as active gateway</label>
+          </div>
+
+          {/* Actions */}
+          <div className="flex items-center gap-3 pt-4">
+            <button
+              type="submit"
+              disabled={loading}
+              className="flex-1 btn-primary"
+            >
+              {loading ? "Saving..." : gatewayId ? "Update Gateway" : "Add Gateway"}
+            </button>
+            <button
+              type="button"
+              onClick={onClose}
+              className="px-4 py-2 rounded-lg border border-border hover:bg-surface transition"
+            >
+              Cancel
+            </button>
+          </div>
+        </form>
+      </DialogContent>
+    </Dialog>
   );
 }
