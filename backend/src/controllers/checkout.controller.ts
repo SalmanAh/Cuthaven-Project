@@ -1,6 +1,6 @@
 import type { Request, Response, NextFunction } from "express";
 import { z } from "zod";
-import { stripe } from "../config/stripe.js";
+import { getStripeInstance, getStripeWebhookSecret } from "../config/stripe.js";
 import { supabaseAdmin } from "../config/supabase.js";
 import { sendOrderConfirmationEmail, type EmailOrderItem } from "../emails/orderConfirmation.js";
 import { sendOrderShippedEmail } from "../emails/orderShipped.js";
@@ -295,7 +295,8 @@ export async function createPaymentIntent(req: Request, res: Response, next: Nex
       country:   shippingAddress.country,
     };
 
-    // ── 4. Create Stripe PaymentIntent ──────────────────────────────────────
+    // ── 4. Create Stripe PaymentIntent (using database-configured gateway) ──
+    const stripe = await getStripeInstance();
     const paymentIntent = await stripe.paymentIntents.create({
       amount: totalCents,
       currency: "usd",
@@ -358,27 +359,28 @@ export async function createPaymentIntent(req: Request, res: Response, next: Nex
 // This is the authoritative source of payment truth — not the frontend redirect.
 export async function stripeWebhook(req: Request, res: Response, next: NextFunction) {
   const sig = req.headers["stripe-signature"];
-  const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
+  
+  // Fetch webhook secret from database (with env var fallback)
+  let webhookSecret: string;
+  try {
+    webhookSecret = await getStripeWebhookSecret();
+  } catch (err) {
+    console.error("[WEBHOOK] Failed to get webhook secret:", err);
+    return res.status(500).json({ error: "Webhook configuration error" });
+  }
 
-  // In production, STRIPE_WEBHOOK_SECRET is guaranteed by env.ts startup check.
-  // In development without the CLI running it will be undefined — we parse directly.
   let event;
   if (webhookSecret && sig) {
     try {
+      const stripe = await getStripeInstance();
       event = stripe.webhooks.constructEvent(req.body as Buffer, sig, webhookSecret);
     } catch {
       console.error("[WEBHOOK] Signature verification failed — possible spoofed request");
       return res.status(400).json({ error: "Webhook signature verification failed" });
     }
   } else {
-    if (process.env.NODE_ENV === "production") {
-      // Should never reach here in production because env.ts throws on startup,
-      // but this is a defence-in-depth guard.
-      console.error("[WEBHOOK] STRIPE_WEBHOOK_SECRET missing in production — rejecting");
-      return res.status(400).json({ error: "Webhook not configured" });
-    }
-    // Dev mode without webhook secret — parse directly (never in production)
-    event = req.body;
+    console.error("[WEBHOOK] Missing webhook secret or signature");
+    return res.status(400).json({ error: "Webhook not configured" });
   }
 
   try {
@@ -563,6 +565,7 @@ export async function confirmStripeOrder(req: Request, res: Response, next: Next
     }
 
     // Verify the PaymentIntent is actually paid — never trust the frontend claim
+    const stripe = await getStripeInstance();
     const pi = await stripe.paymentIntents.retrieve(paymentIntentId);
     if (pi.status !== "succeeded") {
       return res.status(400).json({ error: "Payment has not been completed" });

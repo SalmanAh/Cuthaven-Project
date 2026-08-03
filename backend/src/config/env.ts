@@ -19,16 +19,15 @@ const envSchema = z.object({
   // Prod: https://www.cuthaven.com
   STORE_URL: z.string().url().default("http://localhost:8080"),
 
-  // PayPal — required for PayPal checkout. Get from https://developer.paypal.com
-  // Use sandbox credentials for development, live credentials for production.
+  // PayPal — DEPRECATED: Now managed via payment_gateways table
+  // These are kept as optional fallback for backward compatibility
   PAYPAL_CLIENT_ID:     z.string().optional(),
   PAYPAL_CLIENT_SECRET: z.string().optional(),
   PAYPAL_MODE: z.enum(["sandbox", "live"]).default("sandbox"),
 
-  // Stripe — required for checkout. Get from https://dashboard.stripe.com/apikeys
-  STRIPE_SECRET_KEY: z.string().min(1, "STRIPE_SECRET_KEY is required"),
-  // Required in production — get from Stripe Dashboard > Webhooks after registering endpoint.
-  // In development it's optional (Stripe CLI forwards events locally).
+  // Stripe — DEPRECATED: Now managed via payment_gateways table
+  // These are kept as optional fallback for backward compatibility
+  STRIPE_SECRET_KEY: z.string().optional(),
   STRIPE_WEBHOOK_SECRET: z.string().optional(),
 });
 
@@ -42,25 +41,10 @@ if (!parsed.success) {
 
 export const env = parsed.data;
 
-// In production, STRIPE_WEBHOOK_SECRET is mandatory.
-// Without it, the webhook endpoint cannot verify Stripe's signature and will
-// accept any arbitrary POST — a serious security hole.
-if (env.NODE_ENV === "production" && !env.STRIPE_WEBHOOK_SECRET) {
-  throw new Error(
-    "STRIPE_WEBHOOK_SECRET is required in production. " +
-    "Register your webhook at https://dashboard.stripe.com/webhooks and paste the secret here.",
-  );
-}
-
 // In production, warn if email is not configured — orders will confirm but no email is sent.
 if (env.NODE_ENV === "production" && !env.RESEND_API_KEY) {
   console.warn(
     "⚠️  RESEND_API_KEY is not set. Order confirmation emails will be skipped. " +
     "Get a key at https://resend.com and add it to your production .env.",
   );
-}
-
-// In production, warn if PayPal is not configured
-if (env.NODE_ENV === "production" && (!env.PAYPAL_CLIENT_ID || !env.PAYPAL_CLIENT_SECRET)) {
-  console.warn("⚠️  PAYPAL_CLIENT_ID or PAYPAL_CLIENT_SECRET not set. PayPal checkout will be unavailable.");
 }
