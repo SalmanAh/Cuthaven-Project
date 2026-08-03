@@ -265,22 +265,57 @@ export async function updateProduct(req: Request, res: Response, next: NextFunct
 }
 
 // ─── DELETE /api/admin/products/:id ────────────────────────────────────────
-// Soft-delete only — sets is_active = false. Hard delete is never done so
-// order_items that reference the product keep their denormalised name/image.
+// Hybrid delete: checks if product has orders
+// - NO ORDERS: Hard delete (permanently removes from DB)
+// - HAS ORDERS: Soft delete (sets is_active = false to preserve order history)
 export async function deleteProduct(req: Request, res: Response, next: NextFunction) {
   try {
     const { id } = req.params;
-    const { data, error } = await supabaseAdmin
-      .from("products")
-      .update({ is_active: false, updated_at: new Date().toISOString() })
-      .eq("id", id)
-      .select("id, name")
-      .maybeSingle();
 
-    if (error) throw error;
-    if (!data) return res.status(404).json({ error: "Product not found" });
+    // Check if product has any orders
+    const { data: orderItems, error: checkError } = await supabaseAdmin
+      .from("order_items")
+      .select("id")
+      .eq("product_id", id)
+      .limit(1);
 
-    return res.json({ message: "Product deactivated", product: data });
+    if (checkError) throw checkError;
+
+    if (orderItems && orderItems.length > 0) {
+      // Product has orders - SOFT DELETE only (preserve order history)
+      const { data, error } = await supabaseAdmin
+        .from("products")
+        .update({ is_active: false, updated_at: new Date().toISOString() })
+        .eq("id", id)
+        .select("id, name")
+        .maybeSingle();
+
+      if (error) throw error;
+      if (!data) return res.status(404).json({ error: "Product not found" });
+
+      return res.json({ 
+        message: "Product deactivated (has existing orders - cannot be permanently deleted)", 
+        product: data,
+        deleteType: "deactivated"
+      });
+    } else {
+      // No orders - HARD DELETE is safe
+      const { data, error } = await supabaseAdmin
+        .from("products")
+        .delete()
+        .eq("id", id)
+        .select("id, name")
+        .maybeSingle();
+
+      if (error) throw error;
+      if (!data) return res.status(404).json({ error: "Product not found" });
+
+      return res.json({ 
+        message: "Product permanently deleted", 
+        product: data,
+        deleteType: "deleted"
+      });
+    }
   } catch (err) {
     next(err);
   }
