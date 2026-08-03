@@ -1,6 +1,12 @@
 # ── Documentation & DB files ──────────────────────────────────────────
 *.md
 !PROGRESS.md
+!SECURITY_FIXES_APPLIED.md
+!TEAM_REVIEW_NOTES.md
+!SECURITY_AUDIT_REPORT.md
+!FIXES_APPLIED.md
+!PAYMENT_GATEWAY_SETUP.md
+!VERIFICATION_REPORT.md
 *.sql
 *.pdf
 *.docx
