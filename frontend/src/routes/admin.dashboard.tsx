@@ -179,24 +179,24 @@ function Overview() {
   if (!stats)  return <ErrMsg msg="Could not load analytics." />;
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4 sm:space-y-5 md:space-y-6">
       <div className="flex justify-end"><TimeFilter value={period} onChange={(p) => setPeriod(p as AdminPeriod)} /></div>
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
         <StatCard label="Total Revenue"   value={`$${stats.revenue.toLocaleString()}`} trend={stats.revTrend} />
         <StatCard label="Total Orders"    value={stats.orders}    trend={stats.ordTrend} />
         <StatCard label="Total Customers" value={stats.customers} trend={stats.custTrend} />
         <StatCard label="Avg Order Value" value={`$${stats.avgOrder}`} trend={stats.aovTrend} />
       </div>
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
         <StatCard label="Pending"    value={stats.pending}    accent="#E07B1A" />
         <StatCard label="Processing" value={stats.processing} accent="#2D6A4F" />
         <StatCard label="Shipped"    value={stats.shipped}    accent="#4A90E2" />
         <StatCard label="Delivered"  value={stats.delivered}  accent="#1B4332" />
       </div>
-      <div className="grid lg:grid-cols-3 gap-4">
+      <div className="grid lg:grid-cols-3 gap-3 sm:gap-4">
         <DashCard className="lg:col-span-2">
-          <h3 className="font-display text-lg font-bold mb-4">Revenue</h3>
-          <div className="h-64">
+          <h3 className="font-display text-base sm:text-lg font-bold mb-3 sm:mb-4">Revenue</h3>
+          <div className="h-48 sm:h-56 md:h-64">
             <ResponsiveContainer><AreaChart data={series}>
               <defs><linearGradient id="rev" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#2D6A4F" stopOpacity={0.4} /><stop offset="100%" stopColor="#2D6A4F" stopOpacity={0} /></linearGradient></defs>
               <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" />
@@ -208,8 +208,8 @@ function Overview() {
           </div>
         </DashCard>
         <DashCard>
-          <h3 className="font-display text-lg font-bold mb-4">Orders by Status</h3>
-          <div className="h-64">
+          <h3 className="font-display text-base sm:text-lg font-bold mb-3 sm:mb-4">Orders by Status</h3>
+          <div className="h-48 sm:h-56 md:h-64">
             <ResponsiveContainer><PieChart>
               <Pie data={dist} dataKey="value" nameKey="name" innerRadius={45} outerRadius={80}>
                 {dist.map((e, i) => <Cell key={i} fill={e.color} />)}
@@ -219,10 +219,10 @@ function Overview() {
           </div>
         </DashCard>
       </div>
-      <div className="grid lg:grid-cols-3 gap-4">
+      <div className="grid lg:grid-cols-3 gap-3 sm:gap-4">
         <DashCard className="lg:col-span-2">
-          <h3 className="font-display text-lg font-bold mb-4">Orders per Day</h3>
-          <div className="h-64">
+          <h3 className="font-display text-base sm:text-lg font-bold mb-3 sm:mb-4">Orders per Day</h3>
+          <div className="h-48 sm:h-56 md:h-64">
             <ResponsiveContainer><BarChart data={series}>
               <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" />
               <XAxis dataKey="label" fontSize={11} stroke="var(--color-text-secondary)" />
@@ -233,36 +233,38 @@ function Overview() {
           </div>
         </DashCard>
         <DashCard>
-          <h3 className="font-display text-lg font-bold mb-4">Top Products</h3>
-          <ul className="space-y-3">
+          <h3 className="font-display text-base sm:text-lg font-bold mb-3 sm:mb-4">Top Products</h3>
+          <ul className="space-y-2 sm:space-y-3">
             {products.map((p) => (
-              <li key={p.id} className="flex gap-3 items-center">
-                <img src={p.primaryImageUrl} alt="" className="h-10 w-10 rounded object-cover" />
-                <div className="flex-1 min-w-0"><p className="text-sm font-medium truncate">{p.name}</p><p className="text-xs text-text-secondary">{p.stockQuantity} in stock</p></div>
-                <span className="text-accent font-semibold text-sm">${p.price}</span>
+              <li key={p.id} className="flex gap-2 sm:gap-3 items-center">
+                <img src={p.primaryImageUrl} alt="" className="h-8 w-8 sm:h-10 sm:w-10 rounded object-cover" />
+                <div className="flex-1 min-w-0"><p className="text-xs sm:text-sm font-medium truncate">{p.name}</p><p className="text-[10px] sm:text-xs text-text-secondary">{p.stockQuantity} in stock</p></div>
+                <span className="text-accent font-semibold text-xs sm:text-sm">${p.price}</span>
               </li>
             ))}
           </ul>
         </DashCard>
       </div>
       <DashCard>
-        <h3 className="font-display text-lg font-bold mb-4">Recent Orders</h3>
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead><tr className="text-left text-text-secondary border-b border-border">
-              <th className="py-2 pr-3">Order #</th><th className="py-2 pr-3">Customer</th>
-              <th className="py-2 pr-3">Date</th><th className="py-2 pr-3">Status</th><th className="py-2">Total</th>
-            </tr></thead>
-            <tbody>{orders.map((o) => (
-              <tr key={o.id} className="border-b border-border">
-                <td className="py-2.5 pr-3 font-mono">{o.orderNumber}</td>
-                <td className="py-2.5 pr-3">{o.customerName ?? o.customerEmail ?? "Guest"}</td>
-                <td className="py-2.5 pr-3">{o.createdAt.slice(0,10)}</td>
-                <td className="py-2.5 pr-3"><StatusBadge status={o.status as any} /></td>
-                <td className="py-2.5 font-semibold">${o.total.toFixed(2)}</td>
-              </tr>
-            ))}</tbody>
-          </table>
+        <h3 className="font-display text-base sm:text-lg font-bold mb-3 sm:mb-4">Recent Orders</h3>
+        <div className="overflow-x-auto -mx-4 sm:mx-0">
+          <div className="min-w-[640px] px-4 sm:px-0">
+            <table className="w-full text-xs sm:text-sm">
+              <thead><tr className="text-left text-text-secondary border-b border-border">
+                <th className="py-2 pr-3">Order #</th><th className="py-2 pr-3">Customer</th>
+                <th className="py-2 pr-3">Date</th><th className="py-2 pr-3">Status</th><th className="py-2">Total</th>
+              </tr></thead>
+              <tbody>{orders.map((o) => (
+                <tr key={o.id} className="border-b border-border">
+                  <td className="py-2.5 pr-3 font-mono">{o.orderNumber}</td>
+                  <td className="py-2.5 pr-3">{o.customerName ?? o.customerEmail ?? "Guest"}</td>
+                  <td className="py-2.5 pr-3">{o.createdAt.slice(0,10)}</td>
+                  <td className="py-2.5 pr-3"><StatusBadge status={o.status as any} /></td>
+                  <td className="py-2.5 font-semibold">${o.total.toFixed(2)}</td>
+                </tr>
+              ))}</tbody>
+            </table>
+          </div>
         </div>
       </DashCard>
     </div>
@@ -320,65 +322,69 @@ function OrdersPage() {
   const statuses = ["All","pending","confirmed","processing","shipped","delivered","cancelled","refunded"];
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-3 sm:space-y-4">
       <DashCard>
-        <div className="flex flex-wrap gap-1.5 mb-4">
+        <div className="flex flex-wrap gap-1 sm:gap-1.5 mb-3 sm:mb-4">
           {statuses.map((s) => {
             const count = s === "All" ? total : orders.filter((o) => o.status === s).length;
             return (
-              <button key={s} onClick={() => setFilter(s)} className={`px-3 py-1.5 rounded-full text-xs font-medium capitalize ${filter === s ? "bg-primary text-primary-foreground" : "bg-muted hover:bg-primary/10"}`}>{s} ({count})</button>
+              <button key={s} onClick={() => setFilter(s)} className={`px-2 sm:px-3 py-1 sm:py-1.5 rounded-full text-[10px] sm:text-xs font-medium capitalize ${filter === s ? "bg-primary text-primary-foreground" : "bg-muted hover:bg-primary/10"}`}>{s} ({count})</button>
             );
           })}
         </div>
-        <div className="flex flex-wrap gap-3 items-center mb-4">
-          <div className="relative flex-1 min-w-[200px]">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-text-secondary" />
-            <input value={q} onChange={(e) => setQ(e.target.value)} onKeyDown={(e) => e.key === "Enter" && load()} placeholder="Search order # or customer" className="w-full pl-9 pr-3 py-2 rounded-lg border border-border text-sm focus:outline-none focus:border-primary" />
+        <div className="flex flex-wrap gap-2 sm:gap-3 items-center mb-3 sm:mb-4">
+          <div className="relative flex-1 min-w-[160px] sm:min-w-[200px]">
+            <Search className="absolute left-2 sm:left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 sm:h-4 sm:w-4 text-text-secondary" />
+            <input value={q} onChange={(e) => setQ(e.target.value)} onKeyDown={(e) => e.key === "Enter" && load()} placeholder="Search order # or customer" className="w-full pl-8 sm:pl-9 pr-2 sm:pr-3 py-1.5 sm:py-2 rounded-lg border border-border text-xs sm:text-sm focus:outline-none focus:border-primary" />
           </div>
-          <select value={payFilter} onChange={(e) => setPayFilter(e.target.value)} className="px-3 py-2 rounded-lg border border-border text-sm bg-surface">
+          <select value={payFilter} onChange={(e) => setPayFilter(e.target.value)} className="px-2 sm:px-3 py-1.5 sm:py-2 rounded-lg border border-border text-xs sm:text-sm bg-surface">
             <option>All</option><option>Paid</option><option>Unpaid</option>
           </select>
         </div>
         {loading ? <Spinner /> : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead><tr className="text-left text-text-secondary border-b border-border">
-                <th className="py-2 pr-3">Order #</th><th className="py-2 pr-3">Customer</th>
-                <th className="py-2 pr-3">Date</th><th className="py-2 pr-3">Status</th>
-                <th className="py-2 pr-3">Payment</th><th className="py-2 pr-3">Total</th><th className="py-2">Actions</th>
-              </tr></thead>
-              <tbody>{orders.map((o) => (
-                <tr key={o.id} className="border-b border-border">
-                  <td className="py-3 pr-3 font-mono">{o.orderNumber}</td>
-                  <td className="py-3 pr-3">{o.customerName ?? o.customerEmail ?? "Guest"}</td>
-                  <td className="py-3 pr-3">{o.createdAt.slice(0,10)}</td>
-                  <td className="py-3 pr-3"><StatusBadge status={o.status as any} /></td>
-                  <td className="py-3 pr-3"><PaymentBadge status={o.paymentStatus === "paid" ? "Paid" : "Unpaid"} /></td>
-                  <td className="py-3 pr-3 font-semibold">${o.total.toFixed(2)}</td>
-                  <td className="py-3">
-                    <div className="flex items-center gap-1">
-                      <button onClick={() => setDetail(o)} className="p-1.5 hover:bg-muted rounded" aria-label="View"><Eye className="h-4 w-4" /></button>
-                      <select value={o.status} onChange={(e) => updateStatus(o.id, e.target.value as AdminOrder["status"])} className="text-xs border border-border rounded px-1.5 py-1 bg-surface">
-                        {["pending","confirmed","processing","shipped","delivered","cancelled","refunded"].map((s) => <option key={s}>{s}</option>)}
-                      </select>
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild><button className="p-1.5 hover:bg-muted rounded"><MoreVertical className="h-4 w-4" /></button></DropdownMenuTrigger>
-                        <DropdownMenuContent align="end">
-                          {o.paymentStatus !== "paid" && (
-                            <DropdownMenuItem onClick={() => markAsPaid(o.id)} className="text-success">
-                              Mark as Paid
-                            </DropdownMenuItem>
-                          )}
-                          <DropdownMenuItem onClick={() => setToDelete(o.id)} className="text-destructive">Delete</DropdownMenuItem>
-                        </DropdownMenuContent>
-                      </DropdownMenu>
-                    </div>
-                  </td>
-                </tr>
-              ))}</tbody>
-            </table>
-            <p className="text-xs text-text-secondary mt-4">Showing {orders.length} of {total}</p>
-          </div>
+          <>
+            <div className="overflow-x-auto -mx-4 sm:mx-0">
+              <div className="min-w-[640px] px-4 sm:px-0">
+                <table className="w-full text-xs sm:text-sm">
+                  <thead><tr className="text-left text-text-secondary border-b border-border">
+                    <th className="py-2 pr-2 sm:pr-3">Order #</th><th className="py-2 pr-2 sm:pr-3">Customer</th>
+                    <th className="py-2 pr-2 sm:pr-3">Date</th><th className="py-2 pr-2 sm:pr-3">Status</th>
+                    <th className="py-2 pr-2 sm:pr-3">Payment</th><th className="py-2 pr-2 sm:pr-3">Total</th><th className="py-2">Actions</th>
+                  </tr></thead>
+                  <tbody>{orders.map((o) => (
+                    <tr key={o.id} className="border-b border-border">
+                      <td className="py-2.5 sm:py-3 pr-2 sm:pr-3 font-mono text-[10px] sm:text-xs">{o.orderNumber}</td>
+                      <td className="py-2.5 sm:py-3 pr-2 sm:pr-3 max-w-[120px] truncate">{o.customerName ?? o.customerEmail ?? "Guest"}</td>
+                      <td className="py-2.5 sm:py-3 pr-2 sm:pr-3">{o.createdAt.slice(0,10)}</td>
+                      <td className="py-2.5 sm:py-3 pr-2 sm:pr-3"><StatusBadge status={o.status as any} /></td>
+                      <td className="py-2.5 sm:py-3 pr-2 sm:pr-3"><PaymentBadge status={o.paymentStatus === "paid" ? "Paid" : "Unpaid"} /></td>
+                      <td className="py-2.5 sm:py-3 pr-2 sm:pr-3 font-semibold">${o.total.toFixed(2)}</td>
+                      <td className="py-2.5 sm:py-3">
+                        <div className="flex items-center gap-1">
+                          <button onClick={() => setDetail(o)} className="p-1 sm:p-1.5 hover:bg-muted rounded touch-manipulation" aria-label="View"><Eye className="h-3.5 w-3.5 sm:h-4 sm:w-4" /></button>
+                          <select value={o.status} onChange={(e) => updateStatus(o.id, e.target.value as AdminOrder["status"])} className="text-[10px] sm:text-xs border border-border rounded px-1 sm:px-1.5 py-0.5 sm:py-1 bg-surface">
+                            {["pending","confirmed","processing","shipped","delivered","cancelled","refunded"].map((s) => <option key={s}>{s}</option>)}
+                          </select>
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild><button className="p-1 sm:p-1.5 hover:bg-muted rounded touch-manipulation"><MoreVertical className="h-3.5 w-3.5 sm:h-4 sm:w-4" /></button></DropdownMenuTrigger>
+                            <DropdownMenuContent align="end">
+                              {o.paymentStatus !== "paid" && (
+                                <DropdownMenuItem onClick={() => markAsPaid(o.id)} className="text-success text-xs sm:text-sm">
+                                  Mark as Paid
+                                </DropdownMenuItem>
+                              )}
+                              <DropdownMenuItem onClick={() => setToDelete(o.id)} className="text-destructive text-xs sm:text-sm">Delete</DropdownMenuItem>
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}</tbody>
+                </table>
+              </div>
+            </div>
+            <p className="text-[10px] sm:text-xs text-text-secondary mt-3 sm:mt-4">Showing {orders.length} of {total}</p>
+          </>
         )}
       </DashCard>
 
@@ -495,51 +501,53 @@ function ProductsPage() {
   const catNames = ["All", ...Array.from(new Set(items.map((p) => p.categoryName).filter(Boolean) as string[]))];
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-3 sm:space-y-4">
       <DashCard>
-        <div className="flex flex-wrap gap-3 items-center justify-between mb-4">
-          <div className="flex gap-3 flex-1 flex-wrap">
-            <div className="relative flex-1 min-w-[200px]">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-text-secondary" />
-              <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search products" className="w-full pl-9 pr-3 py-2 rounded-lg border border-border text-sm focus:outline-none focus:border-primary" />
+        <div className="flex flex-wrap gap-2 sm:gap-3 items-center justify-between mb-3 sm:mb-4">
+          <div className="flex gap-2 sm:gap-3 flex-1 flex-wrap">
+            <div className="relative flex-1 min-w-[160px] sm:min-w-[200px]">
+              <Search className="absolute left-2 sm:left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 sm:h-4 sm:w-4 text-text-secondary" />
+              <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search products" className="w-full pl-8 sm:pl-9 pr-2 sm:pr-3 py-1.5 sm:py-2 rounded-lg border border-border text-xs sm:text-sm focus:outline-none focus:border-primary" />
             </div>
-            <select value={catFilter} onChange={(e) => setCatFilter(e.target.value)} className="px-3 py-2 rounded-lg border border-border text-sm bg-surface">
+            <select value={catFilter} onChange={(e) => setCatFilter(e.target.value)} className="px-2 sm:px-3 py-1.5 sm:py-2 rounded-lg border border-border text-xs sm:text-sm bg-surface">
               {catNames.map((c) => <option key={c}>{c}</option>)}
             </select>
           </div>
-          <button onClick={() => setAdding(true)} className="btn-primary text-sm flex items-center gap-1"><Plus className="h-4 w-4" /> Add Product</button>
+          <button onClick={() => setAdding(true)} className="btn-primary text-xs sm:text-sm flex items-center gap-1 min-h-[44px] sm:min-h-0 touch-manipulation"><Plus className="h-3.5 w-3.5 sm:h-4 sm:w-4" /> <span className="hidden xs:inline">Add Product</span><span className="xs:hidden">Add</span></button>
         </div>
         {loading ? <Spinner /> : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead><tr className="text-left text-text-secondary border-b border-border">
-                <th className="py-2 pr-3">Image</th><th className="py-2 pr-3">Name</th><th className="py-2 pr-3">SKU</th>
-                <th className="py-2 pr-3">Category</th><th className="py-2 pr-3">Price</th><th className="py-2 pr-3">Stock</th>
-                <th className="py-2 pr-3">Active</th><th className="py-2">Actions</th>
-              </tr></thead>
-              <tbody>{filtered.map((p) => (
-                <tr key={p.id} className="border-b border-border">
-                  <td className="py-3 pr-3"><img src={p.primaryImageUrl} alt="" className="h-10 w-10 rounded object-cover" /></td>
-                  <td className="py-3 pr-3 font-medium max-w-[220px] truncate">{p.name}</td>
-                  <td className="py-3 pr-3 font-mono text-xs">{p.sku ?? "—"}</td>
-                  <td className="py-3 pr-3">{p.categoryName ?? "—"}</td>
-                  <td className="py-3 pr-3 font-semibold">${p.price}</td>
-                  <td className="py-3 pr-3">{p.stockQuantity}</td>
-                  <td className="py-3 pr-3">
-                    <Switch checked={p.isActive} onCheckedChange={async (v) => {
-                      try { await adminUpdateProduct(p.id, { isActive: v }); setItems((prev) => prev.map((x) => x.id === p.id ? { ...x, isActive: v } : x)); }
-                      catch (e: any) { toast.error(e.message); }
-                    }} />
-                  </td>
-                  <td className="py-3">
-                    <div className="flex gap-1">
-                      <button onClick={() => setEditing(p)} className="p-1.5 hover:bg-muted rounded"><Pencil className="h-4 w-4" /></button>
-                      <button onClick={() => setToDelete(p.id)} className="p-1.5 hover:bg-muted rounded text-destructive"><Trash2 className="h-4 w-4" /></button>
-                    </div>
-                  </td>
-                </tr>
-              ))}</tbody>
-            </table>
+          <div className="overflow-x-auto -mx-4 sm:mx-0">
+            <div className="min-w-[720px] px-4 sm:px-0">
+              <table className="w-full text-xs sm:text-sm">
+                <thead><tr className="text-left text-text-secondary border-b border-border">
+                  <th className="py-2 pr-2 sm:pr-3">Image</th><th className="py-2 pr-2 sm:pr-3">Name</th><th className="py-2 pr-2 sm:pr-3">SKU</th>
+                  <th className="py-2 pr-2 sm:pr-3">Category</th><th className="py-2 pr-2 sm:pr-3">Price</th><th className="py-2 pr-2 sm:pr-3">Stock</th>
+                  <th className="py-2 pr-2 sm:pr-3">Active</th><th className="py-2">Actions</th>
+                </tr></thead>
+                <tbody>{filtered.map((p) => (
+                  <tr key={p.id} className="border-b border-border">
+                    <td className="py-2.5 sm:py-3 pr-2 sm:pr-3"><img src={p.primaryImageUrl} alt="" className="h-8 w-8 sm:h-10 sm:w-10 rounded object-cover" /></td>
+                    <td className="py-2.5 sm:py-3 pr-2 sm:pr-3 font-medium max-w-[160px] sm:max-w-[220px] truncate">{p.name}</td>
+                    <td className="py-2.5 sm:py-3 pr-2 sm:pr-3 font-mono text-[10px] sm:text-xs">{p.sku ?? "—"}</td>
+                    <td className="py-2.5 sm:py-3 pr-2 sm:pr-3">{p.categoryName ?? "—"}</td>
+                    <td className="py-2.5 sm:py-3 pr-2 sm:pr-3 font-semibold">${p.price}</td>
+                    <td className="py-2.5 sm:py-3 pr-2 sm:pr-3">{p.stockQuantity}</td>
+                    <td className="py-2.5 sm:py-3 pr-2 sm:pr-3">
+                      <Switch checked={p.isActive} onCheckedChange={async (v) => {
+                        try { await adminUpdateProduct(p.id, { isActive: v }); setItems((prev) => prev.map((x) => x.id === p.id ? { ...x, isActive: v } : x)); }
+                        catch (e: any) { toast.error(e.message); }
+                      }} />
+                    </td>
+                    <td className="py-2.5 sm:py-3">
+                      <div className="flex gap-1">
+                        <button onClick={() => setEditing(p)} className="p-1 sm:p-1.5 hover:bg-muted rounded touch-manipulation"><Pencil className="h-3.5 w-3.5 sm:h-4 sm:w-4" /></button>
+                        <button onClick={() => setToDelete(p.id)} className="p-1 sm:p-1.5 hover:bg-muted rounded text-destructive touch-manipulation"><Trash2 className="h-3.5 w-3.5 sm:h-4 sm:w-4" /></button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}</tbody>
+              </table>
+            </div>
           </div>
         )}
       </DashCard>

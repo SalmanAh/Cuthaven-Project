@@ -71,16 +71,16 @@ export function DashboardShell({
 }
 
 export function DashCard({ children, className = "" }: { children: ReactNode; className?: string }) {
-  return <div className={`bg-surface rounded-2xl border border-border shadow-sm hover:shadow-md transition-shadow p-5 md:p-6 ${className}`}>{children}</div>;
+  return <div className={`bg-surface rounded-xl sm:rounded-2xl border border-border shadow-sm hover:shadow-md transition-shadow p-4 sm:p-5 md:p-6 ${className}`}>{children}</div>;
 }
 
 export function StatCard({ label, value, trend, accent }: { label: string; value: string | number; trend?: number; accent?: string }) {
   return (
-    <div className={`bg-surface rounded-2xl border border-border shadow-sm p-5 ${accent ? `border-l-4` : ""}`} style={accent ? { borderLeftColor: accent } : undefined}>
-      <p className="text-xs uppercase tracking-wide text-text-secondary font-medium">{label}</p>
-      <p className="font-display text-2xl md:text-3xl font-bold text-foreground mt-1">{value}</p>
+    <div className={`bg-surface rounded-xl sm:rounded-2xl border border-border shadow-sm p-3 sm:p-4 md:p-5 ${accent ? `border-l-4` : ""}`} style={accent ? { borderLeftColor: accent } : undefined}>
+      <p className="text-[10px] sm:text-xs uppercase tracking-wide text-text-secondary font-medium">{label}</p>
+      <p className="font-display text-xl sm:text-2xl md:text-3xl font-bold text-foreground mt-1">{value}</p>
       {trend !== undefined && (
-        <p className={`text-xs mt-2 font-medium ${trend >= 0 ? "text-success" : "text-destructive"}`}>
+        <p className={`text-[10px] sm:text-xs mt-1.5 sm:mt-2 font-medium ${trend >= 0 ? "text-success" : "text-destructive"}`}>
           {trend >= 0 ? "↑" : "↓"} {Math.abs(trend)}% vs prev period
         </p>
       )}
