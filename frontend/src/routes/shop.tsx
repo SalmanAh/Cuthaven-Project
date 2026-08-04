@@ -117,34 +117,34 @@ function ShopPage() {
       />
       <PageHero title="Shop" subtitle="Every tool, hand-picked for pros and weekend builders." />
 
-      <div className="mx-auto max-w-7xl px-4 py-10 grid lg:grid-cols-[280px_1fr] gap-8">
-        <aside className="card-surface p-5 h-fit lg:sticky lg:top-24">
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="font-display text-lg font-bold">Filters</h3>
-            {activeCount > 0 && <button onClick={clearAll} className="text-xs text-accent hover:underline">Clear ({activeCount})</button>}
+      <div className="mx-auto max-w-7xl px-3 sm:px-4 py-8 sm:py-10 grid lg:grid-cols-[280px_1fr] gap-6 sm:gap-8">
+        <aside className="card-surface p-4 sm:p-5 h-fit lg:sticky lg:top-24">
+          <div className="flex items-center justify-between mb-3 sm:mb-4">
+            <h3 className="font-display text-base sm:text-lg font-bold">Filters</h3>
+            {activeCount > 0 && <button onClick={clearAll} className="text-[10px] sm:text-xs text-accent hover:underline">Clear ({activeCount})</button>}
           </div>
 
-          <div className="mb-6">
-            <p className="text-sm font-semibold mb-3">Category</p>
-            <div className="space-y-2">
+          <div className="mb-5 sm:mb-6">
+            <p className="text-xs sm:text-sm font-semibold mb-2 sm:mb-3">Category</p>
+            <div className="space-y-1.5 sm:space-y-2">
               {categories.map((c) => (
-                <label key={c.id} className="flex items-center gap-2 text-sm cursor-pointer">
+                <label key={c.id} className="flex items-center gap-2 text-xs sm:text-sm cursor-pointer">
                   <input type="checkbox" checked={selectedCats.includes(c.id)} onChange={() => toggleCat(c.id)} className="accent-primary" />
                   <span>{c.name}</span>
-                  <span className="text-text-muted text-xs ml-auto">({c.productCount})</span>
+                  <span className="text-text-muted text-[10px] sm:text-xs ml-auto">({c.productCount})</span>
                 </label>
               ))}
             </div>
           </div>
 
-          <div className="mb-6">
-            <p className="text-sm font-semibold mb-2">Max Price: <span className="text-accent">${maxPrice}</span></p>
+          <div className="mb-5 sm:mb-6">
+            <p className="text-xs sm:text-sm font-semibold mb-2">Max Price: <span className="text-accent">${maxPrice}</span></p>
             <input type="range" min={20} max={highestPrice} step={10} value={maxPrice} onChange={(e) => { setMaxPrice(Number(e.target.value)); setPage(1); }} className="w-full accent-primary" />
           </div>
 
           <div className="mb-2">
-            <p className="text-sm font-semibold mb-3">Availability</p>
-            <label className="flex items-center gap-2 text-sm cursor-pointer">
+            <p className="text-xs sm:text-sm font-semibold mb-2 sm:mb-3">Availability</p>
+            <label className="flex items-center gap-2 text-xs sm:text-sm cursor-pointer">
               <input type="checkbox" checked={inStockOnly} onChange={(e) => { setInStockOnly(e.target.checked); setPage(1); }} className="accent-primary" />
               In stock only
             </label>
@@ -153,38 +153,38 @@ function ShopPage() {
 
         <div>
           {/* ── Search bar ── */}
-          <div className="relative mb-5">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-text-secondary pointer-events-none" />
+          <div className="relative mb-4 sm:mb-5">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 sm:h-4 sm:w-4 text-text-secondary pointer-events-none" />
             <input
               type="search"
               value={searchQ}
               onChange={(e) => { setSearchQ(e.target.value); setPage(1); }}
               placeholder="Search tools by name, brand or description…"
-              className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-border text-sm focus:outline-none focus:border-primary bg-surface"
+              className="w-full pl-9 sm:pl-10 pr-3 sm:pr-4 py-2 sm:py-2.5 rounded-xl border border-border text-xs sm:text-sm focus:outline-none focus:border-primary bg-surface"
               aria-label="Search products"
             />
             {searchQ && (
               <button
                 onClick={() => { setSearchQ(""); setPage(1); }}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-text-secondary hover:text-foreground"
+                className="absolute right-2 sm:right-3 top-1/2 -translate-y-1/2 text-text-secondary hover:text-foreground p-1"
                 aria-label="Clear search"
               >
-                <X className="h-4 w-4" />
+                <X className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
               </button>
             )}
           </div>
 
-          <div className="flex flex-wrap gap-3 items-center justify-between mb-5">
-            <p className="text-sm text-text-secondary">Showing <span className="font-semibold text-foreground">{filtered.length}</span> results</p>
-            <div className="flex items-center gap-3">
+          <div className="flex flex-wrap gap-2 sm:gap-3 items-center justify-between mb-4 sm:mb-5">
+            <p className="text-xs sm:text-sm text-text-secondary">Showing <span className="font-semibold text-foreground">{filtered.length}</span> results</p>
+            <div className="flex items-center gap-2 sm:gap-3">
               <select value={sort} onChange={(e) => { setSort(e.target.value as Sort); setPage(1); }}
-                className="px-3 py-2 rounded-lg border border-border text-sm focus:outline-none focus:border-primary bg-surface">
+                className="px-2.5 sm:px-3 py-1.5 sm:py-2 rounded-lg border border-border text-xs sm:text-sm focus:outline-none focus:border-primary bg-surface">
                 <option value="default">Default sorting</option>
                 <option value="price-asc">Price: Low to High</option>
                 <option value="price-desc">Price: High to Low</option>
                 <option value="rating">Top Rated</option>
               </select>
-              <div className="flex rounded-lg border border-border overflow-hidden">
+              <div className="hidden sm:flex rounded-lg border border-border overflow-hidden">
                 <button onClick={() => setView("grid")} className={`p-2 ${view === "grid" ? "bg-primary text-primary-foreground" : "hover:bg-muted"}`} aria-label="Grid"><LayoutGrid className="h-4 w-4" /></button>
                 <button onClick={() => setView("list")} className={`p-2 ${view === "list" ? "bg-primary text-primary-foreground" : "hover:bg-muted"}`} aria-label="List"><List className="h-4 w-4" /></button>
               </div>
@@ -192,40 +192,40 @@ function ShopPage() {
           </div>
 
           {selectedCats.length > 0 && (
-            <div className="flex flex-wrap gap-2 mb-4">
+            <div className="flex flex-wrap gap-1.5 sm:gap-2 mb-3 sm:mb-4">
               {selectedCats.map((c) => (
-                <span key={c} className="inline-flex items-center gap-1 px-3 py-1 rounded-full bg-primary/10 text-primary text-xs font-medium">
-                  {c} <button onClick={() => toggleCat(c)}><X className="h-3 w-3" /></button>
+                <span key={c} className="inline-flex items-center gap-1 px-2 sm:px-3 py-0.5 sm:py-1 rounded-full bg-primary/10 text-primary text-[10px] sm:text-xs font-medium">
+                  {c} <button onClick={() => toggleCat(c)} className="hover:text-primary-dark"><X className="h-2.5 w-2.5 sm:h-3 sm:w-3" /></button>
                 </span>
               ))}
             </div>
           )}
 
           {isLoading ? (
-            <div className="card-surface p-12 text-center text-text-secondary">Loading products…</div>
+            <div className="card-surface p-8 sm:p-12 text-center text-text-secondary text-sm">Loading products…</div>
           ) : isError ? (
-            <div className="card-surface p-12 text-center text-destructive">
+            <div className="card-surface p-8 sm:p-12 text-center text-destructive text-xs sm:text-sm">
               Couldn't reach the store backend. Is it running on the port set in VITE_API_URL?
             </div>
           ) : filtered.length === 0 ? (
-            <div className="card-surface p-12 text-center">
-              <p className="text-text-secondary">No products match your filters.</p>
-              <button onClick={clearAll} className="btn-primary mt-4">Clear filters</button>
+            <div className="card-surface p-8 sm:p-12 text-center">
+              <p className="text-text-secondary text-sm">No products match your filters.</p>
+              <button onClick={clearAll} className="btn-primary mt-4 text-xs sm:text-sm">Clear filters</button>
             </div>
           ) : view === "grid" ? (
-            <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-5">
+            <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 sm:gap-4 md:gap-5">
               {paged.map((p) => <ProductCard key={p.id} product={p} />)}
             </div>
           ) : (
-            <div className="space-y-4">
+            <div className="space-y-3 sm:space-y-4">
               {paged.map((p) => (
-                <div key={p.id} className="card-surface p-4 flex gap-4">
-                  <img src={p.images[0]} alt={p.name} className="h-32 w-32 rounded-lg object-cover" />
-                  <div className="flex-1">
-                    <p className="text-xs uppercase text-text-secondary">{p.category}</p>
-                    <h3 className="font-semibold mb-1">{p.name}</h3>
-                    <p className="text-sm text-text-secondary line-clamp-2">{p.shortDescription}</p>
-                    <p className="text-accent font-bold mt-2">${(p.salePrice ?? p.price).toFixed(2)}</p>
+                <div key={p.id} className="card-surface p-3 sm:p-4 flex gap-3 sm:gap-4">
+                  <img src={p.images[0]} alt={p.name} className="h-24 w-24 sm:h-32 sm:w-32 rounded-lg object-cover shrink-0" />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-[10px] sm:text-xs uppercase text-text-secondary">{p.category}</p>
+                    <h3 className="font-semibold text-sm sm:text-base mb-0.5 sm:mb-1 truncate">{p.name}</h3>
+                    <p className="text-xs sm:text-sm text-text-secondary line-clamp-2">{p.shortDescription}</p>
+                    <p className="text-accent font-bold mt-1 sm:mt-2 text-sm sm:text-base">${(p.salePrice ?? p.price).toFixed(2)}</p>
                   </div>
                 </div>
               ))}
@@ -233,21 +233,21 @@ function ShopPage() {
           )}
 
           {totalPages > 1 && (
-            <div className="flex items-center justify-center gap-1 mt-10">
+            <div className="flex items-center justify-center gap-0.5 sm:gap-1 mt-8 sm:mt-10">
               <button
                 onClick={() => { setPage((p) => Math.max(1, p - 1)); window.scrollTo({ top: 0, behavior: "smooth" }); }}
                 disabled={safePage === 1}
-                className="h-9 px-4 rounded-full text-sm font-medium hover:bg-muted disabled:opacity-30 disabled:cursor-not-allowed"
+                className="h-8 sm:h-9 px-2.5 sm:px-4 rounded-full text-xs sm:text-sm font-medium hover:bg-muted disabled:opacity-30 disabled:cursor-not-allowed"
               >← Prev</button>
 
               {pageNumbers.map((n, i) =>
                 n === "…" ? (
-                  <span key={`ellipsis-${i}`} className="h-9 w-9 flex items-center justify-center text-text-secondary text-sm">…</span>
+                  <span key={`ellipsis-${i}`} className="h-8 sm:h-9 w-8 sm:w-9 flex items-center justify-center text-text-secondary text-xs sm:text-sm">…</span>
                 ) : (
                   <button
                     key={n}
                     onClick={() => { setPage(n); window.scrollTo({ top: 0, behavior: "smooth" }); }}
-                    className={`h-9 w-9 rounded-full text-sm font-medium transition-colors ${n === safePage ? "bg-primary text-primary-foreground" : "hover:bg-muted"}`}
+                    className={`h-8 sm:h-9 w-8 sm:w-9 rounded-full text-xs sm:text-sm font-medium transition-colors ${n === safePage ? "bg-primary text-primary-foreground" : "hover:bg-muted"}`}
                   >{n}</button>
                 )
               )}
@@ -255,7 +255,7 @@ function ShopPage() {
               <button
                 onClick={() => { setPage((p) => Math.min(totalPages, p + 1)); window.scrollTo({ top: 0, behavior: "smooth" }); }}
                 disabled={safePage === totalPages}
-                className="h-9 px-4 rounded-full text-sm font-medium hover:bg-muted disabled:opacity-30 disabled:cursor-not-allowed"
+                className="h-8 sm:h-9 px-2.5 sm:px-4 rounded-full text-xs sm:text-sm font-medium hover:bg-muted disabled:opacity-30 disabled:cursor-not-allowed"
               >Next →</button>
             </div>
           )}
