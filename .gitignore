@@ -18,6 +18,7 @@
 *.csv
 *.xlsx
 *.xls
+*ssh.txt
 
 # ── Environment variables ──────────────────────────────────────────────
 .env
