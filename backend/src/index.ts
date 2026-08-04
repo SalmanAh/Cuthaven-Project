@@ -8,6 +8,10 @@ import { apiLimiter } from "./middleware/rateLimiter.js";
 
 const app = express();
 
+// ── Trust proxy ────────────────────────────────────────────────────────────
+// Behind Nginx reverse proxy, trust X-Forwarded-* headers for rate limiting
+app.set("trust proxy", 1);
+
 // ── Security headers ───────────────────────────────────────────────────────
 // helmet sets ~15 HTTP headers that block common web vulnerabilities:
 // X-Content-Type-Options, X-Frame-Options, HSTS, CSP (basic), etc.
