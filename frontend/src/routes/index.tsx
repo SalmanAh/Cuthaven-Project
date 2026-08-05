@@ -171,13 +171,15 @@ function HomePage() {
                     "radial-gradient(closest-side, oklch(0.5 0.09 156 / 0.6), oklch(0.34 0.08 156 / 0.1) 70%, transparent)",
                 }}
               />
-              <img
-                src="https://images.unsplash.com/photo-1581244277943-fe4a9c777189?w=900&auto=format&fit=crop&q=80"
-                alt="Premium socket wrench ratchet tool set"
-                width={1200}
-                height={1200}
-                className="relative z-10 w-full h-full object-contain p-16 drop-shadow-[0_25px_40px_rgba(0,0,0,0.45)]"
-              />
+              <div className="relative z-10 w-full h-full p-16">
+                <img
+                  src="https://images.unsplash.com/photo-1581244277943-fe4a9c777189?w=900&auto=format&fit=crop&q=80"
+                  alt="Premium socket wrench ratchet tool set"
+                  width={1200}
+                  height={1200}
+                  className="w-full h-full object-cover rounded-full drop-shadow-[0_25px_40px_rgba(0,0,0,0.45)]"
+                />
+              </div>
               {/* Floating feature chip — refined */}
               <div className="absolute -right-2 bottom-8 z-20 flex items-center gap-3 rounded-2xl bg-surface/95 backdrop-blur text-foreground pl-3 pr-4 py-3 shadow-2xl ring-1 ring-black/5">
                 <div className="h-10 w-10 rounded-xl bg-accent/15 grid place-items-center">
@@ -272,25 +274,50 @@ function HomePage() {
       {/* ============ CATEGORY / PROMO ROW ============ */}
       <section className="mx-auto max-w-7xl px-3 sm:px-4 pb-16 sm:pb-20">
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 md:gap-5">
-          {promoTiles.map((c, i) => (
-            <Link
-              key={c.id}
-              to="/shop"
-              className={`group relative overflow-hidden rounded-2xl sm:rounded-3xl min-h-[180px] sm:min-h-[220px] ${
-                i === 3 ? "bg-primary text-primary-foreground" : ""
-              }`}
-            >
-              {i !== 3 && (
-                <div className="absolute inset-0 bg-gradient-to-br from-primary/80 to-primary-dark" />
-              )}
-              <div className="relative p-4 sm:p-5 h-full flex flex-col justify-end text-white">
-                <h3 className="font-display text-lg sm:text-xl md:text-2xl font-bold leading-tight">{c.name}</h3>
-                <p className="mt-1 text-[10px] sm:text-xs uppercase tracking-widest text-white/80 inline-flex items-center gap-1">
-                  {c.productCount} products <ArrowRight className="h-3 w-3" />
-                </p>
-              </div>
-            </Link>
-          ))}
+          {promoTiles.map((c, i) => {
+            // Category-specific images with circular shaded effect
+            const categoryImages = [
+              "https://images.unsplash.com/photo-1504280390367-361c6d9f38f4?w=800&auto=format&fit=crop&q=70", // Camping tent
+              "https://www.joyebike.com/product/beast/images/banner-img-mobile.png", // E-bike
+              "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcSNVUgEawjNipvMEgLqWEcuPFvVuawcHCHvD3ObUj_tU7sxWOuPiYW0sdpJ&s=10", // Electric scooter
+              "https://images.unsplash.com/photo-1416879595882-3373a0480b5b?w=800&auto=format&fit=crop&q=70", // Lawn mower
+            ];
+            
+            return (
+              <Link
+                key={c.id}
+                to="/shop"
+                className="group relative overflow-hidden rounded-2xl sm:rounded-3xl min-h-[180px] sm:min-h-[220px]"
+              >
+                {/* Background gradient */}
+                <div className="absolute inset-0 bg-gradient-to-br from-primary/90 to-primary-dark" />
+                
+                {/* Circular shaded product image - fitted to square card */}
+                <div className="absolute inset-0 opacity-30 group-hover:opacity-40 transition-opacity duration-500">
+                  <div 
+                    className="absolute inset-0"
+                    style={{
+                      background: "radial-gradient(ellipse 100% 100% at 50% 50%, oklch(0.5 0.09 156 / 0.5), transparent 65%)",
+                    }}
+                  />
+                  <img
+                    src={categoryImages[i]}
+                    alt={c.name}
+                    loading="lazy"
+                    className="absolute inset-0 w-full h-full object-cover opacity-70 mix-blend-soft-light scale-105 group-hover:scale-115 transition-transform duration-700"
+                  />
+                </div>
+                
+                {/* Content */}
+                <div className="relative p-4 sm:p-5 h-full flex flex-col justify-end text-white z-10">
+                  <h3 className="font-display text-lg sm:text-xl md:text-2xl font-bold leading-tight drop-shadow-lg">{c.name}</h3>
+                  <p className="mt-1 text-[10px] sm:text-xs uppercase tracking-widest text-white/90 inline-flex items-center gap-1 drop-shadow">
+                    {c.productCount} products <ArrowRight className="h-3 w-3" />
+                  </p>
+                </div>
+              </Link>
+            );
+          })}
         </div>
       </section>
 
