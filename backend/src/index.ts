@@ -18,11 +18,23 @@ app.set("trust proxy", 1);
 app.use(helmet());
 
 // ── CORS ───────────────────────────────────────────────────────────────────
-// Only the configured frontend origin can call this API from a browser.
-// In production FRONTEND_ORIGIN must be the exact deployed domain (no trailing slash).
+// Support multiple frontend origins (e.g., with and without www)
+// FRONTEND_ORIGIN can be a single origin or comma-separated list
+const allowedOrigins = env.FRONTEND_ORIGIN.split(",").map((o) => o.trim());
+
 app.use(
   cors({
-    origin: env.FRONTEND_ORIGIN,
+    origin: (origin, callback) => {
+      // Allow requests with no origin (mobile apps, curl, Postman, etc.)
+      if (!origin) return callback(null, true);
+      
+      // Check if origin is in allowed list
+      if (allowedOrigins.includes(origin)) {
+        callback(null, true);
+      } else {
+        callback(new Error(`Origin ${origin} not allowed by CORS`));
+      }
+    },
     methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
     allowedHeaders: ["Content-Type", "Authorization"],
     credentials: false, // we use Bearer tokens, not cookies
