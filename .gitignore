@@ -12,12 +12,16 @@
 !FRONTEND_BACKEND_CONNECTION.md
 !DEPLOYMENT_GUIDE_INITIAL.md
 !DEPLOYMENT_GUIDE_UPDATES.md
+!DYNAMIC_PAYMENT_GATEWAYS.md
+!TEST_PAYMENT_GATEWAYS.md
+!MOBILE_RESPONSIVE_DOCUMENTATION.md
 *.sql
+*.sh
+*.csv
 *.pdf
 *.docx
 *.doc
 *.txt
-*.csv
 *.xlsx
 *.xls
 *ssh.txt
@@ -58,8 +62,3 @@ Thumbs.db
 
 # ── Lovable ───────────────────────────────────────────────────────────
 frontend/.lovable/
-
-*.sql
-*.sh
-*.csv
-*.md
