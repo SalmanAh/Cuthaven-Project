@@ -617,35 +617,47 @@ git stash pop
 
 ---
 
-### Problem: CORS errors after update
+### Problem: CORS errors after update (www vs non-www)
 
 **Symptoms in browser:**
 ```
 Cross-Origin Request Blocked: CORS header 'Access-Control-Allow-Origin' does not match
 ```
 
+**Common Cause:** Users accessing via www when env only has non-www (or vice versa)
+
 **Check backend environment:**
 ```bash
 cat /root/Cuthaven-Project/backend/.env | grep FRONTEND_ORIGIN
 ```
 
-**Must be exactly:**
+**Must include BOTH www and non-www:**
 ```
-FRONTEND_ORIGIN=https://cuthaven.com
+FRONTEND_ORIGIN=https://cuthaven.com,https://www.cuthaven.com
 ```
 
 **Fix:**
 ```bash
 nano /root/Cuthaven-Project/backend/.env
-# Update FRONTEND_ORIGIN=https://cuthaven.com (no trailing slash)
+# Update to: FRONTEND_ORIGIN=https://cuthaven.com,https://www.cuthaven.com
+# (comma-separated, no spaces)
 pm2 restart cuthaven-backend --update-env
 ```
 
-**Verify:**
+**Verify BOTH work:**
 ```bash
-curl -I -H "Origin: https://cuthaven.com" https://api.cuthaven.com/api/products
-# Should include: Access-Control-Allow-Origin: https://cuthaven.com
+curl -I -H "Origin: https://cuthaven.com" https://api.cuthaven.com/api/products | grep Access-Control
+# Should return: Access-Control-Allow-Origin: https://cuthaven.com
+
+curl -I -H "Origin: https://www.cuthaven.com" https://api.cuthaven.com/api/products | grep Access-Control
+# Should return: Access-Control-Allow-Origin: https://www.cuthaven.com
 ```
+
+**Test in browsers:**
+- Incognito mode: https://cuthaven.com/shop
+- Incognito mode: https://www.cuthaven.com/shop
+- Mobile browser: both URLs
+- All should work without CORS errors
 
 ### Problem: Supabase WebSocket errors after update
 

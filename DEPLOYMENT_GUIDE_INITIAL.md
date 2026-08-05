@@ -235,7 +235,7 @@ nano .env
 **Update these values:**
 ```env
 NODE_ENV=production
-FRONTEND_ORIGIN=https://cuthaven.com
+FRONTEND_ORIGIN=https://cuthaven.com,https://www.cuthaven.com
 PORT=4000
 
 # Supabase (no changes needed)
@@ -247,6 +247,8 @@ RESEND_API_KEY=your-actual-resend-key
 
 # DO NOT include Stripe keys here - they're stored in database
 ```
+
+**CRITICAL:** `FRONTEND_ORIGIN` must include BOTH www and non-www domains (comma-separated, no spaces after comma)
 
 **Save:** Ctrl+O, Enter, Ctrl+X
 
@@ -1198,14 +1200,50 @@ ss -tlnp | grep node
 
 ## Common Post-Deployment Issues
 
-### Issue 1: CORS Errors (Frontend Can't Connect to Backend)
+### Issue 1: CORS Errors - www vs non-www Domain Mismatch
+
+**Symptoms:**
+- Works on some browsers but not others
+- Works on laptop but fails on mobile
+- Browser console: "CORS header 'Access-Control-Allow-Origin' does not match"
+- Error appears when accessing via `https://www.cuthaven.com` but not `https://cuthaven.com` (or vice versa)
+
+**Root Cause:** 
+Users can access your site via `https://cuthaven.com` OR `https://www.cuthaven.com`. If `FRONTEND_ORIGIN` only includes one, the other will fail with CORS errors.
+
+**Solution:**
+```bash
+# On VPS
+ssh cuthaven
+nano /root/Cuthaven-Project/backend/.env
+
+# Change to include BOTH:
+FRONTEND_ORIGIN=https://cuthaven.com,https://www.cuthaven.com
+
+# Save and restart
+pm2 restart cuthaven-backend --update-env
+
+# Test BOTH origins work:
+curl -I -H "Origin: https://cuthaven.com" https://api.cuthaven.com/api/products | grep Access-Control
+curl -I -H "Origin: https://www.cuthaven.com" https://api.cuthaven.com/api/products | grep Access-Control
+
+# Each should return its own matching origin
+```
+
+**Verification:**
+- Test in incognito: https://cuthaven.com/shop
+- Test in incognito: https://www.cuthaven.com/shop
+- Test on mobile with both URLs
+- All should work without CORS errors
+
+### Issue 2: CORS Errors (Frontend Can't Connect to Backend)
 
 **Symptoms:**
 - Browser console shows: "Cross-Origin Request Blocked"
 - API calls fail with CORS errors
 - Products/data not loading on frontend
 
-**Root Cause:** Backend `FRONTEND_ORIGIN` doesn't match actual frontend domain
+**Root Cause:** Backend `FRONTEND_ORIGIN` doesn't match actual frontend domain, or users access via www vs non-www
 
 **Solution:**
 ```bash
@@ -1213,20 +1251,28 @@ ss -tlnp | grep node
 ssh cuthaven
 cat /root/Cuthaven-Project/backend/.env | grep FRONTEND_ORIGIN
 
-# Must show: FRONTEND_ORIGIN=https://cuthaven.com
-# If wrong, fix it:
+# MUST include both www and non-www:
+# FRONTEND_ORIGIN=https://cuthaven.com,https://www.cuthaven.com
 nano /root/Cuthaven-Project/backend/.env
-# Set: FRONTEND_ORIGIN=https://cuthaven.com (no trailing slash, no www)
+# Set: FRONTEND_ORIGIN=https://cuthaven.com,https://www.cuthaven.com
 
 # Restart with updated env
 pm2 restart cuthaven-backend --update-env
 
-# Verify fix
-curl -I -H "Origin: https://cuthaven.com" https://api.cuthaven.com/api/products
+# Verify BOTH origins work
+curl -I -H "Origin: https://cuthaven.com" https://api.cuthaven.com/api/products | grep Access-Control
 # Should show: Access-Control-Allow-Origin: https://cuthaven.com
+
+curl -I -H "Origin: https://www.cuthaven.com" https://api.cuthaven.com/api/products | grep Access-Control
+# Should show: Access-Control-Allow-Origin: https://www.cuthaven.com
 ```
 
-**Prevention:** Always use exact domain without trailing slash
+**Important:** Backend code (as of Aug 5, 2026) supports comma-separated origins and returns only the matching one
+
+**Prevention:** 
+- Always include both www and non-www in FRONTEND_ORIGIN
+- No trailing slashes
+- Test both URLs after deployment
 
 ---
 
