@@ -44,8 +44,12 @@ function AboutPage() {
           </div>
           <Link to="/shop" className="btn-primary mt-6 inline-flex">Shop Our Products →</Link>
         </div>
-        <div className="aspect-square rounded-2xl overflow-hidden bg-muted">
-          <img src="https://placehold.co/800x800/2D6A4F/FAFAF7?text=CutHaven+Workshop" alt="Workshop" className="w-full h-full object-cover" />
+        <div className="aspect-square rounded-2xl overflow-hidden bg-muted relative">
+          <img 
+            src="https://i.postimg.cc/kXBwYqYW/cuthaven-warehouse.jpg" 
+            alt="CutHaven Workshop - Premium tool warehouse with organized inventory" 
+            className="w-full h-full object-cover" 
+          />
         </div>
       </section>
 
