@@ -45,11 +45,21 @@ function AboutPage() {
           <Link to="/shop" className="btn-primary mt-6 inline-flex">Shop Our Products →</Link>
         </div>
         <div className="aspect-square rounded-2xl overflow-hidden bg-muted relative">
+          {/* Background image */}
           <img 
-            src="https://i.postimg.cc/kXBwYqYW/cuthaven-warehouse.jpg" 
+            src="/images/warehouse.jpg" 
             alt="CutHaven Workshop - Premium tool warehouse with organized inventory" 
             className="w-full h-full object-cover" 
           />
+          {/* Dark shaded overlay */}
+          <div className="absolute inset-0 bg-gradient-to-br from-primary/80 via-primary/60 to-primary-dark/90" />
+          {/* Optional: CutHaven Workshop text overlay */}
+          <div className="absolute inset-0 flex items-center justify-center">
+            <div className="text-center text-white">
+              <h3 className="font-display text-3xl md:text-4xl font-bold drop-shadow-lg">CutHaven Workshop</h3>
+              <p className="text-sm md:text-base mt-2 text-white/90 drop-shadow">Premium Tools, Organized Excellence</p>
+            </div>
+          </div>
         </div>
       </section>
 
