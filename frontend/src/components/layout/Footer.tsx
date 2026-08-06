@@ -1,6 +1,8 @@
 import { Link } from "@tanstack/react-router";
 import { Truck, RotateCcw, Headphones, ShieldCheck, Facebook, Instagram, Twitter, Linkedin, MapPin, Mail, Phone, Leaf, CreditCard } from "lucide-react";
 import { useUI } from "@/context/UIContext";
+import { useQuery } from "@tanstack/react-query";
+import { getCategories } from "@/lib/api-client";
 
 function CookiePrefsLink() {
   const { openCookiePrefs } = useUI();
@@ -15,6 +17,9 @@ const trust = [
 ];
 
 export function Footer() {
+  const { data: categories = [] } = useQuery({ queryKey: ["categories"], queryFn: getCategories });
+  const topCategories = categories.slice(0, 6); // Show first 6 categories
+  
   return (
     <footer className="mt-16 sm:mt-20">
       <div className="bg-surface border-y border-border">
@@ -32,7 +37,7 @@ export function Footer() {
       </div>
 
       <div className="bg-[#1A1A1A] text-white">
-        <div className="mx-auto max-w-7xl px-3 sm:px-4 py-10 sm:py-14 grid gap-8 sm:gap-10 grid-cols-1 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="mx-auto max-w-7xl px-3 sm:px-4 py-10 sm:py-14 grid gap-8 sm:gap-10 grid-cols-1 sm:grid-cols-2 lg:grid-cols-5">
           <div>
             <div className="flex items-center gap-2 mb-3 sm:mb-4">
               <Leaf className="h-5 w-5 sm:h-6 sm:w-6 text-primary-light" />
@@ -48,6 +53,19 @@ export function Footer() {
                 </a>
               ))}
             </div>
+          </div>
+
+          <div>
+            <h4 className="font-display text-base sm:text-lg text-primary-light mb-3 sm:mb-4">Categories</h4>
+            <ul className="space-y-2 sm:space-y-2.5 text-xs sm:text-sm text-white/80">
+              {topCategories.map((cat) => (
+                <li key={cat.id}>
+                  <Link to="/shop" search={{ category: cat.slug }} className="hover:text-white inline-block py-0.5">
+                    {cat.name}
+                  </Link>
+                </li>
+              ))}
+            </ul>
           </div>
 
           <div>
