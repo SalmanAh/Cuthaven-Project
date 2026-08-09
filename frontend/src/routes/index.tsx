@@ -278,7 +278,7 @@ function HomePage() {
             // Category-specific images with circular shaded effect
             const categoryImages = [
               "https://images.unsplash.com/photo-1504280390367-361c6d9f38f4?w=800&auto=format&fit=crop&q=70", // Camping tent
-              "https://www.joyebike.com/product/beast/images/banner-img-mobile.png", // E-bike
+              "/images/ebikes.jpg", // E-bikes - CutHaven branded bikes
               "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcSNVUgEawjNipvMEgLqWEcuPFvVuawcHCHvD3ObUj_tU7sxWOuPiYW0sdpJ&s=10", // Electric scooter
               "https://images.unsplash.com/photo-1416879595882-3373a0480b5b?w=800&auto=format&fit=crop&q=70", // Lawn mower
             ];
