@@ -109,8 +109,16 @@ export function Footer() {
               <p className="text-xs sm:text-sm text-white/70">Deals, guides, and new arrivals — no spam.</p>
             </div>
             <form className="flex gap-2" onSubmit={(e) => e.preventDefault()}>
-              <input type="email" required placeholder="your@email.com" className="flex-1 px-3 sm:px-4 py-2.5 sm:py-3 rounded-full bg-white/10 border border-white/20 text-xs sm:text-sm placeholder:text-white/50 focus:outline-none focus:border-primary-light" />
-              <button className="btn-primary text-xs sm:text-sm px-4 sm:px-6 shrink-0">Subscribe</button>
+              <label htmlFor="footer-email" className="sr-only">Email address</label>
+              <input 
+                id="footer-email"
+                type="email" 
+                required 
+                placeholder="your@email.com" 
+                aria-label="Email address for newsletter"
+                className="flex-1 px-3 sm:px-4 py-2.5 sm:py-3 rounded-full bg-white/10 border border-white/20 text-xs sm:text-sm placeholder:text-white/50 focus:outline-none focus:border-primary-light" 
+              />
+              <button type="submit" className="btn-primary text-xs sm:text-sm px-4 sm:px-6 shrink-0" aria-label="Subscribe to newsletter">Subscribe</button>
             </form>
           </div>
         </div>

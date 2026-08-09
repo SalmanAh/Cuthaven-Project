@@ -1,0 +1,57 @@
+# CutHaven - Premium Outdoor & Garden Tools
+
+CutHaven is your trusted source for premium outdoor, garden, hand, and power tools in the United States. We source quality equipment from manufacturers we trust and back every order with a 40-day return window and 12-month warranty.
+
+## Key Pages
+
+- Homepage: /
+- Shop All Products: /shop
+- Product Categories: /shop?category={category-slug}
+- About Us: /about-us
+- Contact: /contact-us
+- Blog: /blog
+- Track Order: /track-your-order
+- Customer Account: /account/dashboard
+
+## Product Categories
+
+- Camping & Outdoors
+- E-Bikes
+- Electric Scooters
+- Lawn & Garden
+- Hand Tools
+- Power Tools
+- Garden Equipment
+
+## Policies
+
+- Shipping Policy: /shipping-policy
+- Returns & Refund Policy: /returns-refund-policy
+- Privacy Policy: /privacy-policy
+- Terms of Service: /terms-of-service
+
+## Contact Information
+
+- Address: 1633 S Industrial Way, Palmer, AK 99645
+- Email: support@cuthaven.com
+- Phone: +1 (406) 229-9045
+- Business Hours: Monday-Friday, 9:00 AM - 5:00 PM (GMT-06:00) Central Standard Time
+
+## Key Features
+
+- Free shipping on orders over $350
+- 40-day hassle-free returns
+- 12-month manufacturer warranty on all tools
+- Ships within the United States only
+- Secure checkout with multiple payment options (Visa, Mastercard, PayPal, Amex, Discover, Apple Pay, Google Pay, Shop Pay)
+
+## For AI Agents
+
+This site supports:
+- Semantic HTML with proper ARIA labels
+- Accessible navigation and forms
+- Product search and filtering
+- Cart management and checkout
+- Order tracking
+- Customer account management
+- Blog content for tool guides and tips

@@ -49,6 +49,10 @@ function AboutPage() {
           <img 
             src="/images/warehouse.jpg" 
             alt="CutHaven Workshop - Premium tool warehouse with organized inventory" 
+            width={800}
+            height={800}
+            loading="eager"
+            decoding="async"
             className="w-full h-full object-cover" 
           />
           {/* Dark shaded overlay */}

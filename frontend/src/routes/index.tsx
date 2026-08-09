@@ -177,6 +177,9 @@ function HomePage() {
                   alt="Premium socket wrench ratchet tool set"
                   width={1200}
                   height={1200}
+                  loading="eager"
+                  fetchPriority="high"
+                  decoding="async"
                   className="w-full h-full object-cover rounded-full drop-shadow-[0_25px_40px_rgba(0,0,0,0.45)]"
                 />
               </div>
@@ -212,7 +215,10 @@ function HomePage() {
                 <img
                   src={tile.image}
                   alt={tile.label}
+                  width={800}
+                  height={1000}
                   loading="lazy"
+                  decoding="async"
                   className="absolute inset-0 h-full w-full object-cover transition-transform duration-700 group-hover:scale-110"
                 />
                 <div className="absolute inset-0 bg-gradient-to-t from-black/75 via-black/20 to-transparent" />
@@ -303,7 +309,10 @@ function HomePage() {
                   <img
                     src={categoryImages[i]}
                     alt={c.name}
+                    width={800}
+                    height={800}
                     loading="lazy"
+                    decoding="async"
                     className="absolute inset-0 w-full h-full object-cover opacity-70 mix-blend-soft-light scale-105 group-hover:scale-115 transition-transform duration-700"
                   />
                 </div>
@@ -347,13 +356,16 @@ function HomePage() {
             onSubmit={(e) => e.preventDefault()}
             className="relative flex flex-col sm:flex-row gap-2 sm:gap-3"
           >
+            <label htmlFor="homepage-email" className="sr-only">Email address</label>
             <input
+              id="homepage-email"
               type="email"
               required
               placeholder="you@workshop.com"
+              aria-label="Email address for workshop newsletter"
               className="flex-1 rounded-full bg-white/10 border border-white/25 px-4 sm:px-5 py-3 sm:py-4 text-xs sm:text-sm text-white placeholder:text-white/60 focus:outline-none focus:border-accent"
             />
-            <button className="inline-flex items-center justify-center gap-1.5 sm:gap-2 rounded-full bg-accent hover:bg-accent-hover text-accent-foreground px-5 sm:px-7 py-3 sm:py-4 text-xs sm:text-sm font-semibold transition shrink-0">
+            <button type="submit" className="inline-flex items-center justify-center gap-1.5 sm:gap-2 rounded-full bg-accent hover:bg-accent-hover text-accent-foreground px-5 sm:px-7 py-3 sm:py-4 text-xs sm:text-sm font-semibold transition shrink-0" aria-label="Subscribe to workshop newsletter">
               <ShoppingCart className="h-3.5 w-3.5 sm:h-4 sm:w-4" /> Subscribe
             </button>
           </form>

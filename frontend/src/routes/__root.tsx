@@ -53,6 +53,7 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
     meta: [
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1" },
+      { name: "theme-color", content: "#2D6A4F" },
       { title: "CutHaven — Premium Outdoor & Garden Tools" },
       { name: "description", content: "Quality outdoor, garden, hand, and power tools. Free shipping on orders over $350, 40-day easy returns." },
       { property: "og:title", content: "CutHaven — Premium Outdoor & Garden Tools" },
@@ -62,6 +63,9 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       { name: "twitter:title", content: "CutHaven — Premium Outdoor & Garden Tools" },
       { name: "twitter:description", content: "Quality outdoor, garden, hand, and power tools. Free shipping on orders over $350, 40-day easy returns." },
     ],
+    attrs: {
+      lang: "en",
+    },
     links: [
       { rel: "stylesheet", href: appCss },
       { rel: "icon", href: "/favicon.ico", type: "image/x-icon" },
