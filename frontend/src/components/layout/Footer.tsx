@@ -99,6 +99,14 @@ export function Footer() {
               <li className="flex gap-2"><Mail className="h-3.5 w-3.5 sm:h-4 sm:w-4 mt-0.5 shrink-0 text-primary-light" /><a href="mailto:support@cuthaven.com" className="hover:text-white break-all">support@cuthaven.com</a></li>
               <li className="flex gap-2"><Phone className="h-3.5 w-3.5 sm:h-4 sm:w-4 mt-0.5 shrink-0 text-primary-light" /><a href="tel:+14062299045" className="hover:text-white">+1 (406) 229-9045</a></li>
             </ul>
+            <div className="mt-4 sm:mt-5 pt-3 sm:pt-4 border-t border-white/10">
+              <p className="font-semibold text-xs sm:text-sm mb-1.5 sm:mb-2">Business Hours</p>
+              <p className="text-[10px] sm:text-xs text-white/70 leading-relaxed">
+                Mon–Fri: 9am–6pm EST<br />
+                Sat: 10am–4pm EST<br />
+                Sun: Closed
+              </p>
+            </div>
           </div>
         </div>
 
