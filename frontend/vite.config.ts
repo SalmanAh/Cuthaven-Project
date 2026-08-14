@@ -12,4 +12,34 @@ export default defineConfig({
     // nitro/vite builds from this
     server: { entry: "server" },
   },
+  vite: {
+    build: {
+      // Optimize chunk splitting for better caching
+      rollupOptions: {
+        output: {
+          manualChunks: (id) => {
+            // Split vendor code for better caching
+            if (id.includes('node_modules')) {
+              if (id.includes('react') || id.includes('@tanstack/react-router') || id.includes('@tanstack/react-query')) {
+                return 'vendor-react';
+              }
+              if (id.includes('lucide-react') || id.includes('sonner')) {
+                return 'vendor-ui';
+              }
+              if (id.includes('recharts')) {
+                return 'vendor-charts';
+              }
+              return 'vendor';
+            }
+          },
+        },
+      },
+      // Reduce chunk size warnings
+      chunkSizeWarningLimit: 1000,
+    },
+    // Optimize dependencies
+    optimizeDeps: {
+      include: ['react', 'react-dom', '@tanstack/react-router', '@tanstack/react-query'],
+    },
+  },
 });

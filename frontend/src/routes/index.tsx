@@ -24,7 +24,18 @@ export const Route = createFileRoute("/")({
       { property: "og:type", content: "website" },
       { property: "og:url", content: "/" },
     ],
-    links: [{ rel: "canonical", href: "/" }],
+    links: [
+      { rel: "canonical", href: "/" },
+      // Preload hero image for LCP optimization
+      { 
+        rel: "preload", 
+        as: "image", 
+        href: "https://images.unsplash.com/photo-1581244277943-fe4a9c777189?w=600&h=600&auto=format&fit=crop&q=75&fm=webp",
+        imageSrcSet: "https://images.unsplash.com/photo-1581244277943-fe4a9c777189?w=600&h=600&auto=format&fit=crop&q=75&fm=webp 600w, https://images.unsplash.com/photo-1581244277943-fe4a9c777189?w=800&h=800&auto=format&fit=crop&q=75&fm=webp 800w",
+        imageSizes: "(max-width: 1024px) 0px, (max-width: 1280px) 520px, 600px",
+        fetchPriority: "high" as any,
+      }
+    ],
   }),
   component: HomePage,
 });
@@ -83,10 +94,10 @@ const trustItems = [
 
 // Peeking category tiles — match reference composition (Shovels, Categories, Tools, Warranties)
 const heroTiles = [
-  { label: "Shovels", image: "https://images.unsplash.com/photo-1416879595882-3373a0480b5b?w=800&auto=format&fit=crop&q=70" },
-  { label: "Categories", image: "https://images.unsplash.com/photo-1585320806297-9794b3e4eeae?w=800&auto=format&fit=crop&q=70" },
-  { label: "Tools", image: "https://images.unsplash.com/photo-1530124566582-a618bc2615dc?w=800&auto=format&fit=crop&q=70" },
-  { label: "Warranties", image: "https://images.unsplash.com/photo-1504148455328-c376907d081c?w=800&auto=format&fit=crop&q=70" },
+  { label: "Shovels", image: "https://images.unsplash.com/photo-1416879595882-3373a0480b5b?w=400&h=500&auto=format&fit=crop&q=70&fm=webp" },
+  { label: "Categories", image: "https://images.unsplash.com/photo-1585320806297-9794b3e4eeae?w=400&h=500&auto=format&fit=crop&q=70&fm=webp" },
+  { label: "Tools", image: "https://images.unsplash.com/photo-1530124566582-a618bc2615dc?w=400&h=500&auto=format&fit=crop&q=70&fm=webp" },
+  { label: "Warranties", image: "https://images.unsplash.com/photo-1504148455328-c376907d081c?w=400&h=500&auto=format&fit=crop&q=70&fm=webp" },
 ];
 
 function HomePage() {
@@ -146,7 +157,7 @@ function HomePage() {
             </div>
 
             {/* Mini trust row */}
-            <div className="mt-6 sm:mt-10 flex flex-wrap items-center gap-x-4 sm:gap-x-6 gap-y-2 text-[10px] sm:text-xs text-white/70">
+            <div className="mt-6 sm:mt-10 flex flex-wrap items-center gap-x-4 sm:gap-x-6 gap-y-2 text-[10px] sm:text-xs text-white/90">
               <span className="inline-flex items-center gap-1.5 sm:gap-2">
                 <ShieldCheck className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-accent flex-shrink-0" /> 12-Month Warranty
               </span>
@@ -173,10 +184,13 @@ function HomePage() {
               />
               <div className="relative z-10 w-full h-full p-16">
                 <img
-                  src="https://images.unsplash.com/photo-1581244277943-fe4a9c777189?w=900&auto=format&fit=crop&q=80"
+                  src="https://images.unsplash.com/photo-1581244277943-fe4a9c777189?w=600&h=600&auto=format&fit=crop&q=75&fm=webp"
+                  srcSet="https://images.unsplash.com/photo-1581244277943-fe4a9c777189?w=600&h=600&auto=format&fit=crop&q=75&fm=webp 600w,
+                          https://images.unsplash.com/photo-1581244277943-fe4a9c777189?w=800&h=800&auto=format&fit=crop&q=75&fm=webp 800w"
+                  sizes="(max-width: 1024px) 0px, (max-width: 1280px) 520px, 600px"
                   alt="Premium socket wrench ratchet tool set"
-                  width={1200}
-                  height={1200}
+                  width={600}
+                  height={600}
                   loading="eager"
                   fetchPriority="high"
                   decoding="async"
@@ -214,9 +228,11 @@ function HomePage() {
               >
                 <img
                   src={tile.image}
+                  srcSet={`${tile.image.replace('w=400', 'w=300')} 300w, ${tile.image} 400w, ${tile.image.replace('w=400', 'w=600')} 600w`}
+                  sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 25vw"
                   alt={tile.label}
-                  width={800}
-                  height={1000}
+                  width={400}
+                  height={500}
                   loading="lazy"
                   decoding="async"
                   className="absolute inset-0 h-full w-full object-cover transition-transform duration-700 group-hover:scale-110"
@@ -283,10 +299,10 @@ function HomePage() {
           {promoTiles.map((c, i) => {
             // Category-specific images with circular shaded effect
             const categoryImages = [
-              "https://images.unsplash.com/photo-1504280390367-361c6d9f38f4?w=800&auto=format&fit=crop&q=70", // Camping tent
+              "https://images.unsplash.com/photo-1504280390367-361c6d9f38f4?w=400&h=400&auto=format&fit=crop&q=70&fm=webp", // Camping tent
               "/images/ebikes.jpg", // E-bikes - CutHaven branded bikes
               "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcSNVUgEawjNipvMEgLqWEcuPFvVuawcHCHvD3ObUj_tU7sxWOuPiYW0sdpJ&s=10", // Electric scooter
-              "https://images.unsplash.com/photo-1416879595882-3373a0480b5b?w=800&auto=format&fit=crop&q=70", // Lawn mower
+              "https://images.unsplash.com/photo-1416879595882-3373a0480b5b?w=400&h=400&auto=format&fit=crop&q=70&fm=webp", // Lawn mower
             ];
             
             return (
@@ -309,8 +325,8 @@ function HomePage() {
                   <img
                     src={categoryImages[i]}
                     alt={c.name}
-                    width={800}
-                    height={800}
+                    width={400}
+                    height={400}
                     loading="lazy"
                     decoding="async"
                     className="absolute inset-0 w-full h-full object-cover opacity-70 mix-blend-soft-light scale-105 group-hover:scale-115 transition-transform duration-700"
@@ -348,7 +364,7 @@ function HomePage() {
             <h2 className="font-display font-bold text-2xl sm:text-3xl md:text-4xl mt-2 sm:mt-3 leading-tight">
               Join the workshop. Get $20 off your first order.
             </h2>
-            <p className="mt-2 sm:mt-3 text-white/80 text-xs sm:text-sm max-w-md">
+            <p className="mt-2 sm:mt-3 text-white/90 text-xs sm:text-sm max-w-md">
               Field notes, restocks and members-only drops — delivered monthly. No spam.
             </p>
           </div>
@@ -363,7 +379,7 @@ function HomePage() {
               required
               placeholder="you@workshop.com"
               aria-label="Email address for workshop newsletter"
-              className="flex-1 rounded-full bg-white/10 border border-white/25 px-4 sm:px-5 py-3 sm:py-4 text-xs sm:text-sm text-white placeholder:text-white/60 focus:outline-none focus:border-accent"
+              className="flex-1 rounded-full bg-white/10 border border-white/25 px-4 sm:px-5 py-3 sm:py-4 text-xs sm:text-sm text-white placeholder:text-white/70 focus:outline-none focus:border-accent"
             />
             <button type="submit" className="inline-flex items-center justify-center gap-1.5 sm:gap-2 rounded-full bg-accent hover:bg-accent-hover text-accent-foreground px-5 sm:px-7 py-3 sm:py-4 text-xs sm:text-sm font-semibold transition shrink-0" aria-label="Subscribe to workshop newsletter">
               <ShoppingCart className="h-3.5 w-3.5 sm:h-4 sm:w-4" /> Subscribe

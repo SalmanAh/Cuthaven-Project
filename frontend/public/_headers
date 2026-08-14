@@ -1,0 +1,33 @@
+# Cloudflare Workers caching headers for optimal performance
+
+# Static assets (CSS, JS, images) - long-term cache with immutable
+/assets/*
+  cache-control: public, max-age=31536000, immutable
+  
+# Images - 1 year cache
+/images/*
+  cache-control: public, max-age=31536000, immutable
+
+# Fonts - 1 year cache
+*.woff
+  cache-control: public, max-age=31536000, immutable
+*.woff2
+  cache-control: public, max-age=31536000, immutable
+
+# HTML pages - 1 hour cache with revalidation
+/*.html
+  cache-control: public, max-age=3600, must-revalidate
+
+# Root page - 10 minutes cache with revalidation
+/
+  cache-control: public, max-age=600, must-revalidate
+
+# API routes - no cache
+/api/*
+  cache-control: no-cache, no-store, must-revalidate
+
+# Special files
+/favicon.ico
+  cache-control: public, max-age=2592000
+/llms.txt
+  cache-control: public, max-age=86400
