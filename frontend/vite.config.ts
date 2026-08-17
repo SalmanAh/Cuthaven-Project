@@ -19,27 +19,52 @@ export default defineConfig({
         output: {
           manualChunks: (id) => {
             // Split vendor code for better caching
-            if (id.includes('node_modules')) {
-              if (id.includes('react') || id.includes('@tanstack/react-router') || id.includes('@tanstack/react-query')) {
-                return 'vendor-react';
+            if (id.includes("node_modules")) {
+              // Core React and routing libraries - change rarely
+              if (id.includes("react") || id.includes("react-dom")) {
+                return "vendor-react";
               }
-              if (id.includes('lucide-react') || id.includes('sonner')) {
-                return 'vendor-ui';
+              if (id.includes("@tanstack/react-router") || id.includes("@tanstack/react-query")) {
+                return "vendor-tanstack";
               }
-              if (id.includes('recharts')) {
-                return 'vendor-charts';
+              // UI components - Radix UI
+              if (id.includes("@radix-ui")) {
+                return "vendor-radix";
               }
-              return 'vendor';
+              // Icons and notifications
+              if (id.includes("lucide-react") || id.includes("sonner")) {
+                return "vendor-ui";
+              }
+              // Charts library - often used on specific pages
+              if (id.includes("recharts")) {
+                return "vendor-charts";
+              }
+              // Payment gateways - lazy load these
+              if (id.includes("@stripe") || id.includes("@paypal")) {
+                return "vendor-payment";
+              }
+              // Other vendors
+              return "vendor";
             }
           },
         },
       },
+      // Minification uses default Vite minifier
+      // Source maps for production debugging
+      sourcemap: false, // Disable to reduce bundle size
       // Reduce chunk size warnings
       chunkSizeWarningLimit: 1000,
+      // CSS code splitting
+      cssCodeSplit: true,
     },
     // Optimize dependencies
     optimizeDeps: {
-      include: ['react', 'react-dom', '@tanstack/react-router', '@tanstack/react-query'],
+      include: ["react", "react-dom", "@tanstack/react-router", "@tanstack/react-query"],
+      exclude: ["@stripe/react-stripe-js", "@paypal/react-paypal-js"],
+    },
+    // Enable CSS optimization
+    css: {
+      devSourcemap: false,
     },
   },
 });

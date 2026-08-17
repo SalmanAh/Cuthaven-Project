@@ -12,10 +12,7 @@ const searchSchema = z.object({
 export const Route = createFileRoute("/account/login")({
   validateSearch: searchSchema,
   head: () => ({
-    meta: [
-      { title: "Log In — CutHaven" },
-      { name: "robots", content: "noindex" },
-    ],
+    meta: [{ title: "Log In — CutHaven" }, { name: "robots", content: "noindex" }],
   }),
   component: LoginPage,
 });
@@ -135,7 +132,8 @@ function LoginPage() {
         </form>
 
         <div className="my-6 flex items-center gap-3 text-xs text-text-secondary">
-          <span className="flex-1 border-t border-border" />OR
+          <span className="flex-1 border-t border-border" />
+          OR
           <span className="flex-1 border-t border-border" />
         </div>
 

@@ -42,7 +42,7 @@ const USER_KEY = "ch-user";
 // Supabase access tokens expire in 1 hour.
 // We refresh 5 minutes before expiry to keep the session alive silently.
 const REFRESH_MARGIN_MS = 5 * 60 * 1000; // 5 min
-const TOKEN_TTL_MS = 55 * 60 * 1000;     // refresh every 55 min
+const TOKEN_TTL_MS = 55 * 60 * 1000; // refresh every 55 min
 
 // ─── Context ───────────────────────────────────────────────────────────────
 
@@ -50,11 +50,7 @@ const AuthContext = createContext<AuthContextValue | null>(null);
 
 // ─── Request helper ────────────────────────────────────────────────────────
 
-async function authFetch<T>(
-  path: string,
-  body: unknown,
-  token?: string | null,
-): Promise<T> {
+async function authFetch<T>(path: string, body: unknown, token?: string | null): Promise<T> {
   const headers: Record<string, string> = { "Content-Type": "application/json" };
   if (token) headers["Authorization"] = `Bearer ${token}`;
 
@@ -69,7 +65,9 @@ async function authFetch<T>(
     const message =
       typeof data.error === "string"
         ? data.error
-        : Object.values(data.error as Record<string, string[]>).flat().join(", ");
+        : Object.values(data.error as Record<string, string[]>)
+            .flat()
+            .join(", ");
     throw new Error(message);
   }
   return data as T;
@@ -96,24 +94,27 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   // Schedules a silent token refresh TOKEN_TTL_MS from now
-  const scheduleRefresh = useCallback((refreshToken: string) => {
-    if (refreshTimerRef.current) clearTimeout(refreshTimerRef.current);
-    refreshTimerRef.current = setTimeout(async () => {
-      try {
-        const data = await authFetch<{ accessToken: string; refreshToken: string }>(
-          "/auth/refresh",
-          { refreshToken },
-        );
-        localStorage.setItem(TOKEN_KEY, data.accessToken);
-        localStorage.setItem(REFRESH_KEY, data.refreshToken);
-        setState((s) => ({ ...s, accessToken: data.accessToken }));
-        scheduleRefresh(data.refreshToken); // chain the next refresh
-      } catch {
-        // Refresh token expired — force logout
-        clearState();
-      }
-    }, TOKEN_TTL_MS);
-  }, [clearState]);
+  const scheduleRefresh = useCallback(
+    (refreshToken: string) => {
+      if (refreshTimerRef.current) clearTimeout(refreshTimerRef.current);
+      refreshTimerRef.current = setTimeout(async () => {
+        try {
+          const data = await authFetch<{ accessToken: string; refreshToken: string }>(
+            "/auth/refresh",
+            { refreshToken },
+          );
+          localStorage.setItem(TOKEN_KEY, data.accessToken);
+          localStorage.setItem(REFRESH_KEY, data.refreshToken);
+          setState((s) => ({ ...s, accessToken: data.accessToken }));
+          scheduleRefresh(data.refreshToken); // chain the next refresh
+        } catch {
+          // Refresh token expired — force logout
+          clearState();
+        }
+      }, TOKEN_TTL_MS);
+    },
+    [clearState],
+  );
 
   const persist = useCallback(
     (user: AuthUser, accessToken: string, refreshToken: string) => {
@@ -196,7 +197,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   );
 
   return (
-    <AuthContext.Provider value={{ ...state, login, register, logout, forgotPassword, resetPassword }}>
+    <AuthContext.Provider
+      value={{ ...state, login, register, logout, forgotPassword, resetPassword }}
+    >
       {children}
     </AuthContext.Provider>
   );

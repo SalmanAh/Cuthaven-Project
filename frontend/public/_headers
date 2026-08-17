@@ -3,24 +3,33 @@
 # Static assets (CSS, JS, images) - long-term cache with immutable
 /assets/*
   cache-control: public, max-age=31536000, immutable
+  cross-origin-resource-policy: cross-origin
   
-# Images - 1 year cache
+# Images - 1 year cache with modern format support
 /images/*
   cache-control: public, max-age=31536000, immutable
+  cross-origin-resource-policy: cross-origin
+  accept-ch: DPR, Width, Viewport-Width
 
-# Fonts - 1 year cache
+# Fonts - 1 year cache with preload support
 *.woff
   cache-control: public, max-age=31536000, immutable
+  cross-origin-resource-policy: cross-origin
+  access-control-allow-origin: *
 *.woff2
   cache-control: public, max-age=31536000, immutable
+  cross-origin-resource-policy: cross-origin
+  access-control-allow-origin: *
 
 # HTML pages - 1 hour cache with revalidation
 /*.html
   cache-control: public, max-age=3600, must-revalidate
+  link: </fonts/inter.woff2>; rel=preload; as=font; type=font/woff2; crossorigin
 
 # Root page - 10 minutes cache with revalidation
 /
   cache-control: public, max-age=600, must-revalidate
+  link: </fonts/inter.woff2>; rel=preload; as=font; type=font/woff2; crossorigin
 
 # API routes - no cache
 /api/*
@@ -31,3 +40,11 @@
   cache-control: public, max-age=2592000
 /llms.txt
   cache-control: public, max-age=86400
+
+# Security headers for all routes
+/*
+  x-frame-options: DENY
+  x-content-type-options: nosniff
+  referrer-policy: strict-origin-when-cross-origin
+  permissions-policy: geolocation=(), microphone=(), camera=()
+

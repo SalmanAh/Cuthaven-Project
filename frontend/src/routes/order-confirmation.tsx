@@ -13,10 +13,7 @@ const searchSchema = z.object({
 export const Route = createFileRoute("/order-confirmation")({
   validateSearch: searchSchema,
   head: () => ({
-    meta: [
-      { title: "Order Confirmed — CutHaven" },
-      { name: "robots", content: "noindex" },
-    ],
+    meta: [{ title: "Order Confirmed — CutHaven" }, { name: "robots", content: "noindex" }],
   }),
   component: OrderConfirmationPage,
 });
@@ -26,7 +23,9 @@ function OrderConfirmationPage() {
   const { clear } = useCart();
 
   // Clear the cart once — on mount after successful payment
-  useEffect(() => { clear(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    clear();
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const { data, isLoading, isError } = useQuery({
     queryKey: ["order-summary", orderId],
@@ -36,7 +35,12 @@ function OrderConfirmationPage() {
 
   // No orderId in URL — generic confirmation (shouldn't normally happen)
   if (!orderId) return <GenericConfirmation />;
-  if (isLoading) return <div className="mx-auto max-w-2xl px-4 py-20 text-center text-text-secondary">Loading order…</div>;
+  if (isLoading)
+    return (
+      <div className="mx-auto max-w-2xl px-4 py-20 text-center text-text-secondary">
+        Loading order…
+      </div>
+    );
   if (isError || !data) return <GenericConfirmation />;
 
   const { order, items } = data;
@@ -53,9 +57,8 @@ function OrderConfirmationPage() {
           Order <span className="font-mono font-semibold">{order.order_number}</span>
         </p>
         <p className="text-text-secondary mt-3 max-w-md mx-auto text-sm">
-          We've received your order and will begin processing it shortly.
-          A confirmation email will be sent to{" "}
-          <span className="font-semibold">{addr.email}</span>.
+          We've received your order and will begin processing it shortly. A confirmation email will
+          be sent to <span className="font-semibold">{addr.email}</span>.
         </p>
         <p className="mt-3 text-sm">
           <span className="font-semibold">Estimated Delivery:</span> 5–8 business days
@@ -69,7 +72,11 @@ function OrderConfirmationPage() {
           {items.map((item) => (
             <div key={item.id} className="flex gap-3 items-center border-b border-border pb-3">
               {item.product_image ? (
-                <img src={item.product_image} alt="" className="h-12 w-12 rounded object-cover shrink-0" />
+                <img
+                  src={item.product_image}
+                  alt=""
+                  className="h-12 w-12 rounded object-cover shrink-0"
+                />
               ) : (
                 <div className="h-12 w-12 rounded bg-muted flex items-center justify-center shrink-0">
                   <Package className="h-5 w-5 text-text-secondary" />
@@ -86,7 +93,8 @@ function OrderConfirmationPage() {
 
         <div className="space-y-1.5 text-sm text-text-secondary border-b border-border pb-4">
           <div className="flex justify-between">
-            <span>Subtotal</span><span>${order.subtotal.toFixed(2)}</span>
+            <span>Subtotal</span>
+            <span>${order.subtotal.toFixed(2)}</span>
           </div>
           <div className="flex justify-between">
             <span>Shipping</span>
@@ -95,7 +103,10 @@ function OrderConfirmationPage() {
             </span>
           </div>
           {order.tax_amount > 0 && (
-            <div className="flex justify-between"><span>Tax</span><span>${order.tax_amount.toFixed(2)}</span></div>
+            <div className="flex justify-between">
+              <span>Tax</span>
+              <span>${order.tax_amount.toFixed(2)}</span>
+            </div>
           )}
         </div>
 
@@ -107,15 +118,20 @@ function OrderConfirmationPage() {
         <div className="mt-5 pt-4 border-t border-border text-sm">
           <p className="font-semibold mb-1">Shipping to</p>
           <p className="text-text-secondary">
-            {addr.firstName} {addr.lastName}<br />
+            {addr.firstName} {addr.lastName}
+            <br />
             {addr.address}, {addr.city}, {addr.state} {addr.zip}
           </p>
         </div>
       </div>
 
       <div className="mt-8 flex flex-wrap gap-3 justify-center">
-        <Link to="/track-your-order" className="btn-primary">Track Your Order</Link>
-        <Link to="/shop" className="btn-outline-primary">Continue Shopping</Link>
+        <Link to="/track-your-order" className="btn-primary">
+          Track Your Order
+        </Link>
+        <Link to="/shop" className="btn-outline-primary">
+          Continue Shopping
+        </Link>
       </div>
     </div>
   );
@@ -132,7 +148,9 @@ function GenericConfirmation() {
         Thank you for your purchase. You'll receive a confirmation email shortly.
       </p>
       <div className="mt-8 flex flex-wrap gap-3 justify-center">
-        <Link to="/shop" className="btn-primary">Continue Shopping</Link>
+        <Link to="/shop" className="btn-primary">
+          Continue Shopping
+        </Link>
       </div>
     </div>
   );

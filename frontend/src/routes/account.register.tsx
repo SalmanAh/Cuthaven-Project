@@ -7,10 +7,7 @@ import { PasswordStrength } from "@/components/ui/PasswordStrength";
 
 export const Route = createFileRoute("/account/register")({
   head: () => ({
-    meta: [
-      { title: "Create Account — CutHaven" },
-      { name: "robots", content: "noindex" },
-    ],
+    meta: [{ title: "Create Account — CutHaven" }, { name: "robots", content: "noindex" }],
   }),
   component: RegisterPage,
 });
@@ -37,8 +34,7 @@ function RegisterPage() {
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(false);
 
-  const upd = (k: keyof typeof form, v: string | boolean) =>
-    setForm((f) => ({ ...f, [k]: v }));
+  const upd = (k: keyof typeof form, v: string | boolean) => setForm((f) => ({ ...f, [k]: v }));
 
   const validate = () => {
     const e: Record<string, string> = {};
@@ -90,7 +86,9 @@ function RegisterPage() {
                 onChange={(e) => upd("firstName", e.target.value)}
                 className={`w-full px-3 py-2.5 rounded-lg border text-sm focus:outline-none ${errors.firstName ? "border-destructive" : "border-border focus:border-primary"}`}
               />
-              {errors.firstName && <p className="text-xs text-destructive mt-1">{errors.firstName}</p>}
+              {errors.firstName && (
+                <p className="text-xs text-destructive mt-1">{errors.firstName}</p>
+              )}
             </div>
             <div>
               <label className="block text-sm font-medium mb-1.5">Last Name</label>
@@ -100,7 +98,9 @@ function RegisterPage() {
                 onChange={(e) => upd("lastName", e.target.value)}
                 className={`w-full px-3 py-2.5 rounded-lg border text-sm focus:outline-none ${errors.lastName ? "border-destructive" : "border-border focus:border-primary"}`}
               />
-              {errors.lastName && <p className="text-xs text-destructive mt-1">{errors.lastName}</p>}
+              {errors.lastName && (
+                <p className="text-xs text-destructive mt-1">{errors.lastName}</p>
+              )}
             </div>
           </div>
 

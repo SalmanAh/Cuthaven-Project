@@ -146,7 +146,10 @@ function ResetPasswordPage() {
                   autoComplete="new-password"
                   required
                   value={pw}
-                  onChange={(e) => { setPw(e.target.value); setErr({ ...err, pw: "" }); }}
+                  onChange={(e) => {
+                    setPw(e.target.value);
+                    setErr({ ...err, pw: "" });
+                  }}
                   className={`w-full px-3 py-2.5 pr-10 rounded-lg border text-sm focus:outline-none ${err.pw ? "border-destructive" : "border-border focus:border-primary"}`}
                 />
                 <button
@@ -173,7 +176,10 @@ function ResetPasswordPage() {
                   autoComplete="new-password"
                   required
                   value={confirm}
-                  onChange={(e) => { setConfirm(e.target.value); setErr({ ...err, confirm: "" }); }}
+                  onChange={(e) => {
+                    setConfirm(e.target.value);
+                    setErr({ ...err, confirm: "" });
+                  }}
                   className={`w-full px-3 py-2.5 pr-10 rounded-lg border text-sm focus:outline-none ${err.confirm ? "border-destructive" : "border-border focus:border-primary"}`}
                 />
                 <button

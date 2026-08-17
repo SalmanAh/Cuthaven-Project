@@ -1,7 +1,11 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import {
-  Outlet, Link, createRootRouteWithContext, useRouter,
-  HeadContent, Scripts,
+  Outlet,
+  Link,
+  createRootRouteWithContext,
+  useRouter,
+  HeadContent,
+  Scripts,
 } from "@tanstack/react-router";
 import { useEffect, type ReactNode } from "react";
 import { Toaster } from "@/components/ui/sonner";
@@ -23,8 +27,12 @@ function NotFoundComponent() {
       <div className="max-w-md text-center">
         <h1 className="text-7xl font-bold text-primary font-display">404</h1>
         <h2 className="mt-4 text-xl font-semibold">Page not found</h2>
-        <p className="mt-2 text-sm text-text-secondary">The page you're looking for doesn't exist.</p>
-        <Link to="/" className="btn-primary mt-6 inline-flex">Back to home</Link>
+        <p className="mt-2 text-sm text-text-secondary">
+          The page you're looking for doesn't exist.
+        </p>
+        <Link to="/" className="btn-primary mt-6 inline-flex">
+          Back to home
+        </Link>
       </div>
     </div>
   );
@@ -33,15 +41,27 @@ function NotFoundComponent() {
 function ErrorComponent({ error, reset }: { error: Error; reset: () => void }) {
   console.error(error);
   const router = useRouter();
-  useEffect(() => { reportLovableError(error, { boundary: "tanstack_root_error_component" }); }, [error]);
+  useEffect(() => {
+    reportLovableError(error, { boundary: "tanstack_root_error_component" });
+  }, [error]);
   return (
     <div className="flex min-h-[60vh] items-center justify-center px-4">
       <div className="max-w-md text-center">
         <h1 className="text-xl font-semibold">Something went wrong</h1>
         <p className="mt-2 text-sm text-text-secondary">Try refreshing or head back home.</p>
         <div className="mt-6 flex gap-2 justify-center">
-          <button onClick={() => { router.invalidate(); reset(); }} className="btn-primary">Try again</button>
-          <a href="/" className="btn-outline-primary">Go home</a>
+          <button
+            onClick={() => {
+              router.invalidate();
+              reset();
+            }}
+            className="btn-primary"
+          >
+            Try again
+          </button>
+          <a href="/" className="btn-outline-primary">
+            Go home
+          </a>
         </div>
       </div>
     </div>
@@ -55,13 +75,25 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       { name: "viewport", content: "width=device-width, initial-scale=1" },
       { name: "theme-color", content: "#2D6A4F" },
       { title: "CutHaven — Premium Outdoor & Garden Tools" },
-      { name: "description", content: "Quality outdoor, garden, hand, and power tools. Free shipping on orders over $350, 40-day easy returns." },
+      {
+        name: "description",
+        content:
+          "Quality outdoor, garden, hand, and power tools. Free shipping on orders over $350, 40-day easy returns.",
+      },
       { property: "og:title", content: "CutHaven — Premium Outdoor & Garden Tools" },
-      { property: "og:description", content: "Quality outdoor, garden, hand, and power tools. Free shipping on orders over $350, 40-day easy returns." },
+      {
+        property: "og:description",
+        content:
+          "Quality outdoor, garden, hand, and power tools. Free shipping on orders over $350, 40-day easy returns.",
+      },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },
       { name: "twitter:title", content: "CutHaven — Premium Outdoor & Garden Tools" },
-      { name: "twitter:description", content: "Quality outdoor, garden, hand, and power tools. Free shipping on orders over $350, 40-day easy returns." },
+      {
+        name: "twitter:description",
+        content:
+          "Quality outdoor, garden, hand, and power tools. Free shipping on orders over $350, 40-day easy returns.",
+      },
     ],
     attrs: {
       lang: "en",
@@ -73,7 +105,12 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       { rel: "preconnect", href: "https://fonts.gstatic.com", crossOrigin: "anonymous" },
       { rel: "preconnect", href: "https://images.unsplash.com" },
       { rel: "dns-prefetch", href: "https://images.unsplash.com" },
-      { rel: "stylesheet", href: "https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Playfair+Display:wght@600;700;800&display=swap", media: "print", onLoad: "this.media='all'" as any },
+      {
+        rel: "stylesheet",
+        href: "https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Playfair+Display:wght@600;700;800&display=swap",
+        media: "print",
+        onLoad: "this.media='all'" as any,
+      },
     ],
   }),
   shellComponent: RootShell,
@@ -88,7 +125,10 @@ function RootShell({ children }: { children: ReactNode }) {
       <head>
         <HeadContent />
         <noscript>
-          <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Playfair+Display:wght@600;700;800&display=swap" />
+          <link
+            rel="stylesheet"
+            href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Playfair+Display:wght@600;700;800&display=swap"
+          />
         </noscript>
       </head>
       <body>

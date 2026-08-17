@@ -2,7 +2,10 @@ import { createContext, useContext, useEffect, useState, type ReactNode } from "
 import type { Product } from "@/data/products";
 import { useAuth } from "./AuthContext";
 
-export interface CartItem { product: Product; quantity: number; }
+export interface CartItem {
+  product: Product;
+  quantity: number;
+}
 
 interface CartContextValue {
   items: CartItem[];
@@ -52,9 +55,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
       const max = product.stockQuantity > 0 ? product.stockQuantity : 999;
       if (existing) {
         const newQty = Math.min(existing.quantity + qty, max);
-        return prev.map((i) =>
-          i.product.id === product.id ? { ...i, quantity: newQty } : i
-        );
+        return prev.map((i) => (i.product.id === product.id ? { ...i, quantity: newQty } : i));
       }
       return [...prev, { product, quantity: Math.min(qty, max) }];
     });
@@ -62,12 +63,15 @@ export function CartProvider({ children }: { children: ReactNode }) {
   const removeItem = (id: string) => setItems((prev) => prev.filter((i) => i.product.id !== id));
   const updateQty = (id: string, qty: number) => {
     if (qty < 1) return removeItem(id);
-    setItems((prev) => prev.map((i) => i.product.id === id ? { ...i, quantity: qty } : i));
+    setItems((prev) => prev.map((i) => (i.product.id === id ? { ...i, quantity: qty } : i)));
   };
   const clear = () => setItems([]);
 
   const count = items.reduce((a, i) => a + i.quantity, 0);
-  const subtotal = items.reduce((a, i) => a + (i.product.salePrice ?? i.product.price) * i.quantity, 0);
+  const subtotal = items.reduce(
+    (a, i) => a + (i.product.salePrice ?? i.product.price) * i.quantity,
+    0,
+  );
 
   return (
     <CartContext.Provider value={{ items, count, subtotal, addItem, removeItem, updateQty, clear }}>
@@ -81,4 +85,3 @@ export function useCart() {
   if (!ctx) throw new Error("useCart must be used inside CartProvider");
   return ctx;
 }
-

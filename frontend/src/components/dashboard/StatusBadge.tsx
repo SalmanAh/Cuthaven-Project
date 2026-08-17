@@ -1,7 +1,8 @@
 import type { OrderStatus } from "@/data/orders";
 
 // DB uses lowercase, mock data uses Title Case — handle both
-type DbStatus = "pending" | "confirmed" | "processing" | "shipped" | "delivered" | "cancelled" | "refunded";
+type DbStatus =
+  "pending" | "confirmed" | "processing" | "shipped" | "delivered" | "cancelled" | "refunded";
 type AnyStatus = OrderStatus | DbStatus;
 
 const styles: Record<string, string> = {

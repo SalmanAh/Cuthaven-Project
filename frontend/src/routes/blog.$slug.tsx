@@ -19,13 +19,13 @@ function BlogPostPage() {
 
   const { data, isLoading, isError } = useQuery({
     queryKey: ["blog-post", slug],
-    queryFn:  () => getBlogPostBySlug(slug),
+    queryFn: () => getBlogPostBySlug(slug),
   });
 
   const { data: relatedData } = useQuery({
     queryKey: ["blog-posts-related", data?.post?.category],
-    queryFn:  () => getBlogPosts({ category: data?.post?.category, limit: 3 }),
-    enabled:  !!data?.post?.category,
+    queryFn: () => getBlogPosts({ category: data?.post?.category, limit: 3 }),
+    enabled: !!data?.post?.category,
   });
 
   if (isLoading) {
@@ -34,7 +34,9 @@ function BlogPostPage() {
         <div className="h-6 sm:h-8 bg-muted rounded w-3/4" />
         <div className="h-3 sm:h-4 bg-muted rounded w-1/2" />
         <div className="h-48 sm:h-64 bg-muted rounded-xl sm:rounded-2xl" />
-        {[1,2,3,4].map((i) => <div key={i} className="h-3 sm:h-4 bg-muted rounded" />)}
+        {[1, 2, 3, 4].map((i) => (
+          <div key={i} className="h-3 sm:h-4 bg-muted rounded" />
+        ))}
       </div>
     );
   }
@@ -44,8 +46,15 @@ function BlogPostPage() {
       <div className="flex min-h-[60vh] flex-col items-center justify-center gap-3 sm:gap-4 px-3 sm:px-4 text-center">
         <BookOpen className="h-12 w-12 sm:h-14 sm:w-14 text-text-secondary" />
         <h1 className="font-display text-xl sm:text-2xl font-bold">Post not found</h1>
-        <p className="text-text-secondary text-sm sm:text-base">This article doesn't exist or has been removed.</p>
-        <Link to="/blog" className="btn-primary text-sm sm:text-base min-h-[44px] inline-flex items-center">Back to Blog</Link>
+        <p className="text-text-secondary text-sm sm:text-base">
+          This article doesn't exist or has been removed.
+        </p>
+        <Link
+          to="/blog"
+          className="btn-primary text-sm sm:text-base min-h-[44px] inline-flex items-center"
+        >
+          Back to Blog
+        </Link>
       </div>
     );
   }
@@ -82,7 +91,11 @@ function BlogPostPage() {
           {post.publishedAt && (
             <span className="flex items-center gap-1 text-[10px] sm:text-xs text-text-secondary">
               <Calendar className="h-3 w-3 sm:h-3.5 sm:w-3.5" />
-              {new Date(post.publishedAt).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })}
+              {new Date(post.publishedAt).toLocaleDateString("en-US", {
+                month: "long",
+                day: "numeric",
+                year: "numeric",
+              })}
             </span>
           )}
           <span className="flex items-center gap-1 text-[10px] sm:text-xs text-text-secondary">
@@ -92,7 +105,9 @@ function BlogPostPage() {
         </div>
 
         {/* Title */}
-        <h1 className="font-display text-2xl sm:text-3xl md:text-4xl font-bold leading-tight">{post.title}</h1>
+        <h1 className="font-display text-2xl sm:text-3xl md:text-4xl font-bold leading-tight">
+          {post.title}
+        </h1>
 
         {/* Author */}
         <p className="text-xs sm:text-sm text-text-secondary mt-2">By {post.author}</p>
@@ -100,7 +115,10 @@ function BlogPostPage() {
         {/* Content */}
         <div className="mt-6 sm:mt-8 prose prose-lg max-w-none text-foreground leading-relaxed">
           {post.content.split("\n\n").map((para, i) => (
-            <p key={i} className="mb-4 sm:mb-5 text-sm sm:text-base leading-relaxed text-foreground">
+            <p
+              key={i}
+              className="mb-4 sm:mb-5 text-sm sm:text-base leading-relaxed text-foreground"
+            >
               {para.trim()}
             </p>
           ))}
@@ -122,7 +140,9 @@ function BlogPostPage() {
       {related.length > 0 && (
         <section className="bg-muted/30 border-t border-border mt-6 sm:mt-8 py-8 sm:py-10 md:py-12">
           <div className="mx-auto max-w-7xl px-3 sm:px-4">
-            <h2 className="font-display text-xl sm:text-2xl font-bold mb-4 sm:mb-6">More from CutHaven</h2>
+            <h2 className="font-display text-xl sm:text-2xl font-bold mb-4 sm:mb-6">
+              More from CutHaven
+            </h2>
             <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-5 md:gap-6">
               {related.map((p) => (
                 <Link
@@ -139,8 +159,12 @@ function BlogPostPage() {
                     />
                   )}
                   <div className="p-3 sm:p-4">
-                    <span className="text-[10px] sm:text-xs text-primary font-semibold">{p.category}</span>
-                    <h3 className="font-semibold text-sm sm:text-base mt-1 line-clamp-2 group-hover:text-primary transition">{p.title}</h3>
+                    <span className="text-[10px] sm:text-xs text-primary font-semibold">
+                      {p.category}
+                    </span>
+                    <h3 className="font-semibold text-sm sm:text-base mt-1 line-clamp-2 group-hover:text-primary transition">
+                      {p.title}
+                    </h3>
                     <p className="text-[10px] sm:text-xs text-text-secondary mt-1 flex items-center gap-1">
                       <Clock className="h-2.5 w-2.5 sm:h-3 sm:w-3" /> {p.readTime}
                     </p>

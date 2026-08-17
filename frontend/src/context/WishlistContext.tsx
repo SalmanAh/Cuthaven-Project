@@ -19,10 +19,13 @@ export function WishlistProvider({ children }: { children: ReactNode }) {
     } catch {}
   }, []);
   useEffect(() => {
-    try { if (typeof window !== "undefined") localStorage.setItem("ch-wishlist", JSON.stringify(ids)); } catch {}
+    try {
+      if (typeof window !== "undefined") localStorage.setItem("ch-wishlist", JSON.stringify(ids));
+    } catch {}
   }, [ids]);
 
-  const toggle = (id: string) => setIds((prev) => prev.includes(id) ? prev.filter((i) => i !== id) : [...prev, id]);
+  const toggle = (id: string) =>
+    setIds((prev) => (prev.includes(id) ? prev.filter((i) => i !== id) : [...prev, id]));
   const has = (id: string) => ids.includes(id);
 
   return (

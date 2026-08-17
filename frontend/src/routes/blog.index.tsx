@@ -20,26 +20,24 @@ function BlogIndexPage() {
 
   const { data: catData } = useQuery({
     queryKey: ["blog-categories"],
-    queryFn:  getBlogCategories,
+    queryFn: getBlogCategories,
   });
 
   const { data, isLoading } = useQuery({
     queryKey: ["blog-posts", activeCategory],
-    queryFn:  () => getBlogPosts({
-      category: activeCategory !== "All" ? activeCategory : undefined,
-      limit: 20,
-    }),
+    queryFn: () =>
+      getBlogPosts({
+        category: activeCategory !== "All" ? activeCategory : undefined,
+        limit: 20,
+      }),
   });
 
-  const posts    = data?.posts ?? [];
+  const posts = data?.posts ?? [];
   const categories = ["All", ...(catData?.categories?.map((c) => c.name) ?? [])];
 
   return (
     <div>
-      <PageHero
-        title="The CutHaven Blog"
-        subtitle="Tips, guides and tool advice from the field."
-      />
+      <PageHero title="The CutHaven Blog" subtitle="Tips, guides and tool advice from the field." />
 
       <div className="mx-auto max-w-7xl px-3 sm:px-4 py-8 sm:py-10 md:py-12">
         {/* Category filter */}
@@ -67,8 +65,11 @@ function BlogIndexPage() {
         {/* Posts grid */}
         {isLoading ? (
           <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-5 md:gap-6">
-            {[1,2,3].map((i) => (
-              <div key={i} className="rounded-xl sm:rounded-2xl border border-border bg-surface animate-pulse">
+            {[1, 2, 3].map((i) => (
+              <div
+                key={i}
+                className="rounded-xl sm:rounded-2xl border border-border bg-surface animate-pulse"
+              >
                 <div className="h-40 sm:h-48 bg-muted rounded-t-xl sm:rounded-t-2xl" />
                 <div className="p-4 sm:p-5 space-y-2 sm:space-y-3">
                   <div className="h-3 sm:h-4 bg-muted rounded w-1/3" />
@@ -83,7 +84,9 @@ function BlogIndexPage() {
           <div className="py-16 sm:py-20 md:py-24 text-center px-3">
             <BookOpen className="h-12 w-12 sm:h-14 sm:w-14 text-text-secondary mx-auto mb-3 sm:mb-4" />
             <h2 className="font-display text-xl sm:text-2xl font-bold">No posts yet</h2>
-            <p className="text-text-secondary mt-2 text-sm sm:text-base">Check back soon — new content is on its way.</p>
+            <p className="text-text-secondary mt-2 text-sm sm:text-base">
+              Check back soon — new content is on its way.
+            </p>
           </div>
         ) : (
           <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-5 md:gap-6">
@@ -128,7 +131,11 @@ function BlogIndexPage() {
                     {post.publishedAt && (
                       <span className="flex items-center gap-1">
                         <Calendar className="h-3 w-3 sm:h-3.5 sm:w-3.5" />
-                        {new Date(post.publishedAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
+                        {new Date(post.publishedAt).toLocaleDateString("en-US", {
+                          month: "short",
+                          day: "numeric",
+                          year: "numeric",
+                        })}
                       </span>
                     )}
                     <span className="flex items-center gap-1">

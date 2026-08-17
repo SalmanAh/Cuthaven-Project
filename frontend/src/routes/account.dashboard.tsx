@@ -2,11 +2,26 @@ import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
-  LayoutDashboard, Package, Heart, User, MapPin, Key,
-  LogOut, Eye, EyeOff, Plus, Pencil, Trash2,
+  LayoutDashboard,
+  Package,
+  Heart,
+  User,
+  MapPin,
+  Key,
+  LogOut,
+  Eye,
+  EyeOff,
+  Plus,
+  Pencil,
+  Trash2,
 } from "lucide-react";
 import { toast } from "sonner";
-import { DashboardShell, DashCard, StatCard, type NavItem } from "@/components/dashboard/DashboardShell";
+import {
+  DashboardShell,
+  DashCard,
+  StatCard,
+  type NavItem,
+} from "@/components/dashboard/DashboardShell";
 import { StatusBadge } from "@/components/dashboard/StatusBadge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useWishlist } from "@/context/WishlistContext";
@@ -31,7 +46,10 @@ export const Route = createFileRoute("/account/dashboard")({
   head: () => ({
     meta: [
       { title: "My Account — CutHaven" },
-      { name: "description", content: "Manage your CutHaven orders, wishlist, addresses, and profile." },
+      {
+        name: "description",
+        content: "Manage your CutHaven orders, wishlist, addresses, and profile.",
+      },
       { name: "robots", content: "noindex" },
     ],
   }),
@@ -60,8 +78,11 @@ function CustomerDashboard() {
   ];
 
   const titles: Record<Tab, string> = {
-    dashboard: "Dashboard", orders: "My Orders",
-    addresses: "Addresses", profile: "Profile", password: "Change Password",
+    dashboard: "Dashboard",
+    orders: "My Orders",
+    addresses: "Addresses",
+    profile: "Profile",
+    password: "Change Password",
   };
 
   return (
@@ -73,7 +94,13 @@ function CustomerDashboard() {
         activeKey={tab}
         onSelect={(k) => setTab(k as Tab)}
       >
-        {tab === "dashboard" && <DashboardOverview wishCount={wishCount} onViewOrders={() => setTab("orders")} user={user} />}
+        {tab === "dashboard" && (
+          <DashboardOverview
+            wishCount={wishCount}
+            onViewOrders={() => setTab("orders")}
+            user={user}
+          />
+        )}
         {tab === "orders" && <MyOrders />}
         {tab === "addresses" && <MyAddresses />}
         {tab === "profile" && <MyProfile />}
@@ -129,7 +156,9 @@ function DashboardOverview({
           <div className="text-center py-8">
             <Package className="h-10 w-10 text-primary mx-auto mb-2" />
             <p className="text-sm text-text-secondary">No orders yet</p>
-            <Link to="/shop" className="btn-primary mt-3 inline-flex text-sm">Start Shopping</Link>
+            <Link to="/shop" className="btn-primary mt-3 inline-flex text-sm">
+              Start Shopping
+            </Link>
           </div>
         ) : (
           <OrdersTable orders={orders.slice(0, 5)} />
@@ -143,22 +172,41 @@ function DashboardOverview({
 
 function MyOrders() {
   const [detail, setDetail] = useState<ApiOrder | null>(null);
-  const { data: orders = [], isLoading, isError } = useQuery({
+  const {
+    data: orders = [],
+    isLoading,
+    isError,
+  } = useQuery({
     queryKey: ["my-orders"],
     queryFn: getMyOrders,
   });
 
-  if (isLoading) return <DashCard><p className="py-8 text-center text-text-secondary text-sm">Loading orders…</p></DashCard>;
-  if (isError) return <DashCard><p className="py-8 text-center text-destructive text-sm">Failed to load orders. Please try again.</p></DashCard>;
-  if (orders.length === 0) return (
-    <DashCard>
-      <div className="text-center py-10">
-        <Package className="h-12 w-12 text-primary mx-auto mb-3" />
-        <p className="font-semibold">You haven't placed any orders yet</p>
-        <Link to="/shop" className="btn-primary mt-4 inline-flex">Start Shopping</Link>
-      </div>
-    </DashCard>
-  );
+  if (isLoading)
+    return (
+      <DashCard>
+        <p className="py-8 text-center text-text-secondary text-sm">Loading orders…</p>
+      </DashCard>
+    );
+  if (isError)
+    return (
+      <DashCard>
+        <p className="py-8 text-center text-destructive text-sm">
+          Failed to load orders. Please try again.
+        </p>
+      </DashCard>
+    );
+  if (orders.length === 0)
+    return (
+      <DashCard>
+        <div className="text-center py-10">
+          <Package className="h-12 w-12 text-primary mx-auto mb-3" />
+          <p className="font-semibold">You haven't placed any orders yet</p>
+          <Link to="/shop" className="btn-primary mt-4 inline-flex">
+            Start Shopping
+          </Link>
+        </div>
+      </DashCard>
+    );
 
   return (
     <>
@@ -183,9 +231,16 @@ function MyOrders() {
 
                 <div className="space-y-2">
                   {detail.items.map((it) => (
-                    <div key={it.id} className="flex gap-3 items-center border-b border-border pb-2">
+                    <div
+                      key={it.id}
+                      className="flex gap-3 items-center border-b border-border pb-2"
+                    >
                       {it.productImage ? (
-                        <img src={it.productImage} alt="" className="h-12 w-12 rounded object-cover" />
+                        <img
+                          src={it.productImage}
+                          alt=""
+                          className="h-12 w-12 rounded object-cover"
+                        />
                       ) : (
                         <div className="h-12 w-12 rounded bg-muted flex items-center justify-center">
                           <Package className="h-5 w-5 text-text-secondary" />
@@ -201,20 +256,39 @@ function MyOrders() {
                 </div>
 
                 <div className="space-y-1 pt-2 border-t border-border text-text-secondary">
-                  <div className="flex justify-between"><span>Subtotal</span><span>${detail.subtotal.toFixed(2)}</span></div>
-                  <div className="flex justify-between"><span>Shipping</span><span>{detail.shippingCost === 0 ? "Free" : `$${detail.shippingCost.toFixed(2)}`}</span></div>
-                  {detail.taxAmount > 0 && <div className="flex justify-between"><span>Tax</span><span>${detail.taxAmount.toFixed(2)}</span></div>}
-                  {detail.discountAmount > 0 && <div className="flex justify-between text-success"><span>Discount</span><span>-${detail.discountAmount.toFixed(2)}</span></div>}
+                  <div className="flex justify-between">
+                    <span>Subtotal</span>
+                    <span>${detail.subtotal.toFixed(2)}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span>Shipping</span>
+                    <span>
+                      {detail.shippingCost === 0 ? "Free" : `$${detail.shippingCost.toFixed(2)}`}
+                    </span>
+                  </div>
+                  {detail.taxAmount > 0 && (
+                    <div className="flex justify-between">
+                      <span>Tax</span>
+                      <span>${detail.taxAmount.toFixed(2)}</span>
+                    </div>
+                  )}
+                  {detail.discountAmount > 0 && (
+                    <div className="flex justify-between text-success">
+                      <span>Discount</span>
+                      <span>-${detail.discountAmount.toFixed(2)}</span>
+                    </div>
+                  )}
                   <div className="flex justify-between font-bold text-base text-foreground pt-1 border-t border-border">
-                    <span>Total</span><span className="text-accent">${detail.total.toFixed(2)}</span>
+                    <span>Total</span>
+                    <span className="text-accent">${detail.total.toFixed(2)}</span>
                   </div>
                 </div>
 
                 <div className="pt-3 border-t border-border">
                   <p className="font-semibold mb-1">Shipping Address</p>
                   <p className="text-text-secondary">
-                    {detail.shippingAddress.line1 ?? detail.shippingAddress.address ?? ""},
-                    {" "}{detail.shippingAddress.city}, {detail.shippingAddress.state}{" "}
+                    {detail.shippingAddress.line1 ?? detail.shippingAddress.address ?? ""},{" "}
+                    {detail.shippingAddress.city}, {detail.shippingAddress.state}{" "}
                     {detail.shippingAddress.zip}
                   </p>
                 </div>
@@ -257,11 +331,16 @@ function OrdersTable({
               <td className="py-3 pr-3 font-mono">{o.orderNumber}</td>
               <td className="py-3 pr-3">{new Date(o.createdAt).toLocaleDateString()}</td>
               <td className="py-3 pr-3">{o.items.reduce((a, i) => a + i.quantity, 0)}</td>
-              <td className="py-3 pr-3"><StatusBadge status={o.status} /></td>
+              <td className="py-3 pr-3">
+                <StatusBadge status={o.status} />
+              </td>
               <td className="py-3 pr-3 font-semibold">${o.total.toFixed(2)}</td>
               <td className="py-3">
                 {onView && (
-                  <button onClick={() => onView(o)} className="text-primary hover:underline text-xs">
+                  <button
+                    onClick={() => onView(o)}
+                    className="text-primary hover:underline text-xs"
+                  >
                     View
                   </button>
                 )}
@@ -301,7 +380,7 @@ function MyAddresses() {
     let next: CustomerAddress[];
     const exists = addresses.some((a) => a.id === addr.id);
     if (exists) {
-      next = addresses.map((a) => a.id === addr.id ? addr : a);
+      next = addresses.map((a) => (a.id === addr.id ? addr : a));
     } else {
       next = [...addresses, addr];
     }
@@ -318,7 +397,12 @@ function MyAddresses() {
     toast.success("Address removed");
   };
 
-  if (isLoading) return <DashCard><p className="py-8 text-center text-text-secondary text-sm">Loading addresses…</p></DashCard>;
+  if (isLoading)
+    return (
+      <DashCard>
+        <p className="py-8 text-center text-text-secondary text-sm">Loading addresses…</p>
+      </DashCard>
+    );
 
   return (
     <>
@@ -333,9 +417,13 @@ function MyAddresses() {
                 </span>
               )}
             </div>
-            <p className="text-sm">{a.firstName} {a.lastName}</p>
+            <p className="text-sm">
+              {a.firstName} {a.lastName}
+            </p>
             <p className="text-sm text-text-secondary">{a.address}</p>
-            <p className="text-sm text-text-secondary">{a.city}, {a.state} {a.zip}</p>
+            <p className="text-sm text-text-secondary">
+              {a.city}, {a.state} {a.zip}
+            </p>
             {a.phone && <p className="text-sm text-text-secondary">{a.phone}</p>}
             <div className="flex gap-2 mt-4">
               <button
@@ -364,7 +452,10 @@ function MyAddresses() {
 
       <AddressDialog
         open={!!editing || adding}
-        onClose={() => { setEditing(null); setAdding(false); }}
+        onClose={() => {
+          setEditing(null);
+          setAdding(false);
+        }}
         initial={editing}
         onSave={handleSave}
         saving={saveMutation.isPending}
@@ -374,7 +465,11 @@ function MyAddresses() {
 }
 
 function AddressDialog({
-  open, onClose, initial, onSave, saving,
+  open,
+  onClose,
+  initial,
+  onSave,
+  saving,
 }: {
   open: boolean;
   onClose: () => void;
@@ -383,34 +478,75 @@ function AddressDialog({
   saving: boolean;
 }) {
   const blank: CustomerAddress = {
-    id: `addr-${Date.now()}`, label: "", firstName: "", lastName: "",
-    address: "", city: "", state: "", zip: "", phone: "", isDefault: false,
+    id: `addr-${Date.now()}`,
+    label: "",
+    firstName: "",
+    lastName: "",
+    address: "",
+    city: "",
+    state: "",
+    zip: "",
+    phone: "",
+    isDefault: false,
   };
   const [form, setForm] = useState<CustomerAddress>(initial ?? blank);
   const upd = <K extends keyof CustomerAddress>(k: K, v: CustomerAddress[K]) =>
     setForm((f) => ({ ...f, [k]: v }));
 
   // Reset form when dialog opens
-  useState(() => { setForm(initial ?? blank); });
+  useState(() => {
+    setForm(initial ?? blank);
+  });
 
   return (
-    <Dialog open={open} onOpenChange={(v) => { if (!v) onClose(); }}>
+    <Dialog
+      open={open}
+      onOpenChange={(v) => {
+        if (!v) onClose();
+      }}
+    >
       <DialogContent className="max-w-lg">
         <DialogHeader>
           <DialogTitle>{initial ? "Edit Address" : "Add New Address"}</DialogTitle>
         </DialogHeader>
         <form
-          onSubmit={(e) => { e.preventDefault(); onSave(form); }}
+          onSubmit={(e) => {
+            e.preventDefault();
+            onSave(form);
+          }}
           className="grid grid-cols-2 gap-3"
         >
-          <LabelInput label="Label (e.g. Home)" value={form.label} onChange={(v) => upd("label", v)} full />
-          <LabelInput label="First Name" value={form.firstName} onChange={(v) => upd("firstName", v)} />
-          <LabelInput label="Last Name" value={form.lastName} onChange={(v) => upd("lastName", v)} />
-          <LabelInput label="Street Address" value={form.address} onChange={(v) => upd("address", v)} full />
+          <LabelInput
+            label="Label (e.g. Home)"
+            value={form.label}
+            onChange={(v) => upd("label", v)}
+            full
+          />
+          <LabelInput
+            label="First Name"
+            value={form.firstName}
+            onChange={(v) => upd("firstName", v)}
+          />
+          <LabelInput
+            label="Last Name"
+            value={form.lastName}
+            onChange={(v) => upd("lastName", v)}
+          />
+          <LabelInput
+            label="Street Address"
+            value={form.address}
+            onChange={(v) => upd("address", v)}
+            full
+          />
           <LabelInput label="City" value={form.city} onChange={(v) => upd("city", v)} />
           <LabelInput label="State" value={form.state} onChange={(v) => upd("state", v)} />
           <LabelInput label="ZIP Code" value={form.zip} onChange={(v) => upd("zip", v)} />
-          <LabelInput label="Phone (optional)" value={form.phone} onChange={(v) => upd("phone", v)} required={false} />
+          <LabelInput
+            label="Phone (optional)"
+            value={form.phone}
+            onChange={(v) => upd("phone", v)}
+            required={false}
+          />
           <label className="col-span-2 flex items-center gap-2 text-sm">
             <input
               type="checkbox"
@@ -421,7 +557,11 @@ function AddressDialog({
             Set as default address
           </label>
           <div className="col-span-2 flex justify-end gap-2">
-            <button type="button" onClick={onClose} className="btn-outline-primary text-sm px-4 py-2">
+            <button
+              type="button"
+              onClick={onClose}
+              className="btn-outline-primary text-sm px-4 py-2"
+            >
               Cancel
             </button>
             <button className="btn-primary text-sm px-4 py-2" disabled={saving}>
@@ -447,7 +587,11 @@ function MyProfile() {
   const [initialized, setInitialized] = useState(false);
 
   if (profile && !initialized) {
-    setForm({ firstName: profile.firstName, lastName: profile.lastName, phone: profile.phone ?? "" });
+    setForm({
+      firstName: profile.firstName,
+      lastName: profile.lastName,
+      phone: profile.phone ?? "",
+    });
     setInitialized(true);
   }
 
@@ -460,16 +604,32 @@ function MyProfile() {
     onError: () => toast.error("Failed to update profile"),
   });
 
-  if (isLoading) return <DashCard><p className="py-8 text-center text-text-secondary text-sm">Loading…</p></DashCard>;
+  if (isLoading)
+    return (
+      <DashCard>
+        <p className="py-8 text-center text-text-secondary text-sm">Loading…</p>
+      </DashCard>
+    );
 
   return (
     <DashCard>
       <form
-        onSubmit={(e) => { e.preventDefault(); mutation.mutate(); }}
+        onSubmit={(e) => {
+          e.preventDefault();
+          mutation.mutate();
+        }}
         className="grid md:grid-cols-2 gap-4 max-w-2xl"
       >
-        <LabelInput label="First Name" value={form.firstName} onChange={(v) => setForm({ ...form, firstName: v })} />
-        <LabelInput label="Last Name" value={form.lastName} onChange={(v) => setForm({ ...form, lastName: v })} />
+        <LabelInput
+          label="First Name"
+          value={form.firstName}
+          onChange={(v) => setForm({ ...form, firstName: v })}
+        />
+        <LabelInput
+          label="Last Name"
+          value={form.lastName}
+          onChange={(v) => setForm({ ...form, lastName: v })}
+        />
         <div className="md:col-span-2">
           <label className="block text-xs font-medium mb-1">Email</label>
           <input
@@ -499,23 +659,41 @@ function MyProfile() {
 
 // ─── PwField — TOP-LEVEL. Never define inside ChangePassword or any other component.
 function PwField({
-  id, label, value, onChange, showPw, onToggle, error, autoComplete,
+  id,
+  label,
+  value,
+  onChange,
+  showPw,
+  onToggle,
+  error,
+  autoComplete,
 }: {
-  id: string; label: string; value: string; onChange: (v: string) => void;
-  showPw: boolean; onToggle: () => void; error?: string; autoComplete: string;
+  id: string;
+  label: string;
+  value: string;
+  onChange: (v: string) => void;
+  showPw: boolean;
+  onToggle: () => void;
+  error?: string;
+  autoComplete: string;
 }) {
   return (
     <div>
-      <label htmlFor={id} className="block text-sm font-medium mb-1.5">{label}</label>
+      <label htmlFor={id} className="block text-sm font-medium mb-1.5">
+        {label}
+      </label>
       <div className="relative">
         <input
-          id={id} type={showPw ? "text" : "password"}
-          autoComplete={autoComplete} value={value}
+          id={id}
+          type={showPw ? "text" : "password"}
+          autoComplete={autoComplete}
+          value={value}
           onChange={(e) => onChange(e.target.value)}
           className={`w-full px-3 py-2.5 pr-10 rounded-lg border text-sm focus:outline-none ${error ? "border-destructive" : "border-border focus:border-primary"}`}
         />
         <button
-          type="button" onClick={onToggle}
+          type="button"
+          onClick={onToggle}
           className="absolute right-3 top-1/2 -translate-y-1/2 text-text-secondary"
           aria-label="Toggle password"
         >
@@ -540,7 +718,9 @@ function ChangePassword() {
     mutationFn: () => changeMyPassword(cur, newPw),
     onSuccess: () => {
       toast.success("Password updated successfully");
-      setCur(""); setNewPw(""); setConfirm("");
+      setCur("");
+      setNewPw("");
+      setConfirm("");
     },
     onError: (e: Error) => setErr({ form: e.message }),
   });
@@ -559,25 +739,42 @@ function ChangePassword() {
     <DashCard>
       <form onSubmit={submit} className="space-y-4 max-w-md">
         {err.form && (
-          <div className="rounded-lg bg-destructive/10 px-4 py-3 text-sm text-destructive">{err.form}</div>
+          <div className="rounded-lg bg-destructive/10 px-4 py-3 text-sm text-destructive">
+            {err.form}
+          </div>
         )}
         <PwField
-          id="pw-cur" label="Current Password" value={cur} onChange={setCur}
-          showPw={show.cur} onToggle={() => setShow((s) => ({ ...s, cur: !s.cur }))}
-          error={err.cur} autoComplete="current-password"
+          id="pw-cur"
+          label="Current Password"
+          value={cur}
+          onChange={setCur}
+          showPw={show.cur}
+          onToggle={() => setShow((s) => ({ ...s, cur: !s.cur }))}
+          error={err.cur}
+          autoComplete="current-password"
         />
         <div>
           <PwField
-            id="pw-new" label="New Password" value={newPw} onChange={setNewPw}
-            showPw={show.new} onToggle={() => setShow((s) => ({ ...s, new: !s.new }))}
-            error={err.new} autoComplete="new-password"
+            id="pw-new"
+            label="New Password"
+            value={newPw}
+            onChange={setNewPw}
+            showPw={show.new}
+            onToggle={() => setShow((s) => ({ ...s, new: !s.new }))}
+            error={err.new}
+            autoComplete="new-password"
           />
           <PasswordStrength password={newPw} />
         </div>
         <PwField
-          id="pw-conf" label="Confirm New Password" value={confirm} onChange={setConfirm}
-          showPw={show.confirm} onToggle={() => setShow((s) => ({ ...s, confirm: !s.confirm }))}
-          error={err.confirm} autoComplete="new-password"
+          id="pw-conf"
+          label="Confirm New Password"
+          value={confirm}
+          onChange={setConfirm}
+          showPw={show.confirm}
+          onToggle={() => setShow((s) => ({ ...s, confirm: !s.confirm }))}
+          error={err.confirm}
+          autoComplete="new-password"
         />
         <button className="btn-primary" disabled={mutation.isPending}>
           {mutation.isPending ? "Updating…" : "Update Password"}
@@ -590,16 +787,27 @@ function ChangePassword() {
 // ─── Shared input component ────────────────────────────────────────────────
 
 function LabelInput({
-  label, value, onChange, full, type = "text", required = true,
+  label,
+  value,
+  onChange,
+  full,
+  type = "text",
+  required = true,
 }: {
-  label: string; value: string; onChange: (v: string) => void;
-  full?: boolean; type?: string; required?: boolean;
+  label: string;
+  value: string;
+  onChange: (v: string) => void;
+  full?: boolean;
+  type?: string;
+  required?: boolean;
 }) {
   return (
     <div className={full ? "col-span-2" : ""}>
       <label className="block text-xs font-medium mb-1">{label}</label>
       <input
-        type={type} value={value} onChange={(e) => onChange(e.target.value)}
+        type={type}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
         required={required}
         className="w-full px-3 py-2 rounded-lg border border-border text-sm focus:outline-none focus:border-primary"
       />

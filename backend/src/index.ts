@@ -1,6 +1,7 @@
 import express from "express";
 import cors from "cors";
 import helmet from "helmet";
+import compression from "compression";
 import { env } from "./config/env.js";
 import { apiRouter } from "./routes/index.js";
 import { errorHandler } from "./middleware/errorHandler.js";
@@ -11,6 +12,22 @@ const app = express();
 // ── Trust proxy ────────────────────────────────────────────────────────────
 // Behind Nginx reverse proxy, trust X-Forwarded-* headers for rate limiting
 app.set("trust proxy", 1);
+
+// ── Compression ────────────────────────────────────────────────────────────
+// Enable gzip/deflate compression for all responses
+// This significantly reduces bandwidth and improves load times
+app.use(compression({
+  level: 6, // Balance between compression ratio and CPU usage
+  threshold: 1024, // Only compress responses > 1KB
+  filter: (req, res) => {
+    // Don't compress if client doesn't support it
+    if (req.headers['x-no-compression']) {
+      return false;
+    }
+    // Use compression filter function
+    return compression.filter(req, res);
+  },
+}));
 
 // ── Security headers ───────────────────────────────────────────────────────
 // helmet sets ~15 HTTP headers that block common web vulnerabilities:

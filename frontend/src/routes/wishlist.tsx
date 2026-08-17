@@ -10,12 +10,14 @@ import { toast } from "sonner";
 import type { Product } from "@/data/products";
 
 export const Route = createFileRoute("/wishlist")({
-  head: () => ({ meta: [
-    { title: "My Wishlist — CutHaven" },
-    { name: "description", content: "Your saved CutHaven products." },
-    { property: "og:title", content: "My Wishlist — CutHaven" },
-    { property: "og:description", content: "Your saved CutHaven products." },
-  ] }),
+  head: () => ({
+    meta: [
+      { title: "My Wishlist — CutHaven" },
+      { name: "description", content: "Your saved CutHaven products." },
+      { property: "og:title", content: "My Wishlist — CutHaven" },
+      { property: "og:description", content: "Your saved CutHaven products." },
+    ],
+  }),
   component: WishlistPage,
 });
 
@@ -54,17 +56,27 @@ function WishlistPage() {
           <div className="text-center py-16">
             <Heart className="h-16 w-16 text-primary mx-auto mb-4" />
             <h2 className="font-display text-2xl font-bold">Your wishlist is empty</h2>
-            <p className="text-text-secondary mt-2">Save products you love to find them here later.</p>
-            <Link to="/shop" className="btn-primary mt-6 inline-flex">Browse Products</Link>
+            <p className="text-text-secondary mt-2">
+              Save products you love to find them here later.
+            </p>
+            <Link to="/shop" className="btn-primary mt-6 inline-flex">
+              Browse Products
+            </Link>
           </div>
         ) : (
           <>
             <div className="flex items-center justify-between mb-6">
-              <p className="text-sm text-text-secondary">{items.length} item{items.length !== 1 ? "s" : ""}</p>
-              <button onClick={addAll} className="btn-primary text-sm">Add All to Cart</button>
+              <p className="text-sm text-text-secondary">
+                {items.length} item{items.length !== 1 ? "s" : ""}
+              </p>
+              <button onClick={addAll} className="btn-primary text-sm">
+                Add All to Cart
+              </button>
             </div>
             <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 md:gap-6">
-              {items.map((p) => <ProductCard key={p.id} product={p} />)}
+              {items.map((p) => (
+                <ProductCard key={p.id} product={p} />
+              ))}
             </div>
           </>
         )}

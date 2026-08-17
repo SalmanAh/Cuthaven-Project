@@ -45,7 +45,9 @@ export function HeroSlider() {
             <h1 className="font-display text-4xl md:text-6xl font-bold leading-tight">{s.title}</h1>
             <p className="text-white/85 text-lg max-w-md">{s.subtitle}</p>
             <div className="flex flex-wrap gap-3 pt-3">
-              <Link to="/shop" className="btn-primary">{s.primary}</Link>
+              <Link to="/shop" className="btn-primary">
+                {s.primary}
+              </Link>
               <Link
                 to="/shop"
                 className="inline-flex items-center gap-2 px-6 py-3 rounded-full border-2 border-white text-white text-sm font-semibold hover:bg-white hover:text-primary transition"

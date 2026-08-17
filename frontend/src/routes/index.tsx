@@ -18,8 +18,7 @@ export const Route = createFileRoute("/")({
       { property: "og:title", content: "CutHaven — Forged for the Wild. Built for the Hand." },
       {
         property: "og:description",
-        content:
-          "Premium outdoor, garden and workshop tools designed with heritage and grit.",
+        content: "Premium outdoor, garden and workshop tools designed with heritage and grit.",
       },
       { property: "og:type", content: "website" },
       { property: "og:url", content: "/" },
@@ -27,14 +26,15 @@ export const Route = createFileRoute("/")({
     links: [
       { rel: "canonical", href: "/" },
       // Preload hero image for LCP optimization
-      { 
-        rel: "preload", 
-        as: "image", 
+      {
+        rel: "preload",
+        as: "image",
         href: "https://images.unsplash.com/photo-1581244277943-fe4a9c777189?w=600&h=600&auto=format&fit=crop&q=75&fm=webp",
-        imageSrcSet: "https://images.unsplash.com/photo-1581244277943-fe4a9c777189?w=600&h=600&auto=format&fit=crop&q=75&fm=webp 600w, https://images.unsplash.com/photo-1581244277943-fe4a9c777189?w=800&h=800&auto=format&fit=crop&q=75&fm=webp 800w",
+        imageSrcSet:
+          "https://images.unsplash.com/photo-1581244277943-fe4a9c777189?w=600&h=600&auto=format&fit=crop&q=75&fm=webp 600w, https://images.unsplash.com/photo-1581244277943-fe4a9c777189?w=800&h=800&auto=format&fit=crop&q=75&fm=webp 800w",
         imageSizes: "(max-width: 1024px) 0px, (max-width: 1280px) 520px, 600px",
         fetchPriority: "high" as any,
-      }
+      },
     ],
   }),
   component: HomePage,
@@ -87,17 +87,45 @@ const webSiteJsonLd = {
 };
 
 const trustItems = [
-  { icon: Truck, title: "Ships within the United States Only", desc: "Fast, tracked delivery from Palmer, AK." },
-  { icon: RotateCcw, title: "40-Day Return Window", desc: "No-questions-asked returns on every order." },
-  { icon: ShieldCheck, title: "12-Month Manufacturer Warranty", desc: "Every tool is covered against defects." },
+  {
+    icon: Truck,
+    title: "Ships within the United States Only",
+    desc: "Fast, tracked delivery from Palmer, AK.",
+  },
+  {
+    icon: RotateCcw,
+    title: "40-Day Return Window",
+    desc: "No-questions-asked returns on every order.",
+  },
+  {
+    icon: ShieldCheck,
+    title: "12-Month Manufacturer Warranty",
+    desc: "Every tool is covered against defects.",
+  },
 ];
 
 // Peeking category tiles — match reference composition (Shovels, Categories, Tools, Warranties)
 const heroTiles = [
-  { label: "Shovels", image: "https://images.unsplash.com/photo-1416879595882-3373a0480b5b?w=400&h=500&auto=format&fit=crop&q=70&fm=webp" },
-  { label: "Categories", image: "https://images.unsplash.com/photo-1585320806297-9794b3e4eeae?w=400&h=500&auto=format&fit=crop&q=70&fm=webp" },
-  { label: "Tools", image: "https://images.unsplash.com/photo-1530124566582-a618bc2615dc?w=400&h=500&auto=format&fit=crop&q=70&fm=webp" },
-  { label: "Warranties", image: "https://images.unsplash.com/photo-1504148455328-c376907d081c?w=400&h=500&auto=format&fit=crop&q=70&fm=webp" },
+  {
+    label: "Shovels",
+    image:
+      "https://images.unsplash.com/photo-1416879595882-3373a0480b5b?w=400&h=500&auto=format&fit=crop&q=70&fm=webp",
+  },
+  {
+    label: "Categories",
+    image:
+      "https://images.unsplash.com/photo-1585320806297-9794b3e4eeae?w=400&h=500&auto=format&fit=crop&q=70&fm=webp",
+  },
+  {
+    label: "Tools",
+    image:
+      "https://images.unsplash.com/photo-1530124566582-a618bc2615dc?w=400&h=500&auto=format&fit=crop&q=70&fm=webp",
+  },
+  {
+    label: "Warranties",
+    image:
+      "https://images.unsplash.com/photo-1504148455328-c376907d081c?w=400&h=500&auto=format&fit=crop&q=70&fm=webp",
+  },
 ];
 
 function HomePage() {
@@ -159,13 +187,16 @@ function HomePage() {
             {/* Mini trust row */}
             <div className="mt-6 sm:mt-10 flex flex-wrap items-center gap-x-4 sm:gap-x-6 gap-y-2 text-[10px] sm:text-xs text-white/90">
               <span className="inline-flex items-center gap-1.5 sm:gap-2">
-                <ShieldCheck className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-accent flex-shrink-0" /> 12-Month Warranty
+                <ShieldCheck className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-accent flex-shrink-0" />{" "}
+                12-Month Warranty
               </span>
               <span className="inline-flex items-center gap-1.5 sm:gap-2">
-                <Truck className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-accent flex-shrink-0" /> Free Shipping $350+
+                <Truck className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-accent flex-shrink-0" /> Free
+                Shipping $350+
               </span>
               <span className="inline-flex items-center gap-1.5 sm:gap-2">
-                <RotateCcw className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-accent flex-shrink-0" /> 40-Day Returns
+                <RotateCcw className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-accent flex-shrink-0" /> 40-Day
+                Returns
               </span>
             </div>
           </div>
@@ -203,7 +234,9 @@ function HomePage() {
                   <ShieldCheck className="h-5 w-5 text-accent" />
                 </div>
                 <div className="leading-tight">
-                  <p className="text-[10px] uppercase tracking-widest text-text-secondary">Featured Set</p>
+                  <p className="text-[10px] uppercase tracking-widest text-text-secondary">
+                    Featured Set
+                  </p>
                   <p className="font-display font-bold text-base">Pro Ratchet Kit</p>
                   <p className="text-accent font-bold text-xs mt-0.5">From $149.99</p>
                 </div>
@@ -213,7 +246,10 @@ function HomePage() {
         </div>
 
         {/* Wave / curve base to transition to light surface */}
-        <div className="absolute inset-x-0 bottom-0 h-20 sm:h-24 md:h-32 bg-background rounded-t-[32px] sm:rounded-t-[48px]" aria-hidden />
+        <div
+          className="absolute inset-x-0 bottom-0 h-20 sm:h-24 md:h-32 bg-background rounded-t-[32px] sm:rounded-t-[48px]"
+          aria-hidden
+        />
       </section>
 
       {/* ============ PEEKING CATEGORY TILES ============ */}
@@ -228,7 +264,7 @@ function HomePage() {
               >
                 <img
                   src={tile.image}
-                  srcSet={`${tile.image.replace('w=400', 'w=300')} 300w, ${tile.image} 400w, ${tile.image.replace('w=400', 'w=600')} 600w`}
+                  srcSet={`${tile.image.replace("w=400", "w=300")} 300w, ${tile.image} 400w, ${tile.image.replace("w=400", "w=600")} 600w`}
                   sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 25vw"
                   alt={tile.label}
                   width={400}
@@ -239,7 +275,9 @@ function HomePage() {
                 />
                 <div className="absolute inset-0 bg-gradient-to-t from-black/75 via-black/20 to-transparent" />
                 <div className="absolute inset-x-3 sm:inset-x-5 bottom-3 sm:bottom-5 flex items-end justify-between text-white">
-                  <h3 className="font-display text-xl sm:text-2xl md:text-3xl font-bold drop-shadow">{tile.label}</h3>
+                  <h3 className="font-display text-xl sm:text-2xl md:text-3xl font-bold drop-shadow">
+                    {tile.label}
+                  </h3>
                   <span className="h-7 w-7 sm:h-9 sm:w-9 rounded-full bg-accent grid place-items-center opacity-0 group-hover:opacity-100 translate-y-2 group-hover:translate-y-0 transition">
                     <ArrowRight className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
                   </span>
@@ -286,7 +324,9 @@ function HomePage() {
               </div>
               <div>
                 <p className="font-semibold text-xs sm:text-sm text-foreground">{t.title}</p>
-                <p className="text-[11px] sm:text-xs text-text-secondary mt-0.5 sm:mt-1 leading-relaxed">{t.desc}</p>
+                <p className="text-[11px] sm:text-xs text-text-secondary mt-0.5 sm:mt-1 leading-relaxed">
+                  {t.desc}
+                </p>
               </div>
             </div>
           ))}
@@ -304,7 +344,7 @@ function HomePage() {
               "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcSNVUgEawjNipvMEgLqWEcuPFvVuawcHCHvD3ObUj_tU7sxWOuPiYW0sdpJ&s=10", // Electric scooter
               "https://images.unsplash.com/photo-1416879595882-3373a0480b5b?w=400&h=400&auto=format&fit=crop&q=70&fm=webp", // Lawn mower
             ];
-            
+
             return (
               <Link
                 key={c.id}
@@ -313,13 +353,14 @@ function HomePage() {
               >
                 {/* Background gradient */}
                 <div className="absolute inset-0 bg-gradient-to-br from-primary/90 to-primary-dark" />
-                
+
                 {/* Circular shaded product image - fitted to square card */}
                 <div className="absolute inset-0 opacity-30 group-hover:opacity-40 transition-opacity duration-500">
-                  <div 
+                  <div
                     className="absolute inset-0"
                     style={{
-                      background: "radial-gradient(ellipse 100% 100% at 50% 50%, oklch(0.5 0.09 156 / 0.5), transparent 65%)",
+                      background:
+                        "radial-gradient(ellipse 100% 100% at 50% 50%, oklch(0.5 0.09 156 / 0.5), transparent 65%)",
                     }}
                   />
                   <img
@@ -332,10 +373,12 @@ function HomePage() {
                     className="absolute inset-0 w-full h-full object-cover opacity-70 mix-blend-soft-light scale-105 group-hover:scale-115 transition-transform duration-700"
                   />
                 </div>
-                
+
                 {/* Content */}
                 <div className="relative p-4 sm:p-5 h-full flex flex-col justify-end text-white z-10">
-                  <h3 className="font-display text-lg sm:text-xl md:text-2xl font-bold leading-tight drop-shadow-lg">{c.name}</h3>
+                  <h3 className="font-display text-lg sm:text-xl md:text-2xl font-bold leading-tight drop-shadow-lg">
+                    {c.name}
+                  </h3>
                   <p className="mt-1 text-[10px] sm:text-xs uppercase tracking-widest text-white/90 inline-flex items-center gap-1 drop-shadow">
                     {c.productCount} products <ArrowRight className="h-3 w-3" />
                   </p>
@@ -353,8 +396,7 @@ function HomePage() {
             aria-hidden
             className="absolute -right-24 -top-24 h-96 w-96 rounded-full"
             style={{
-              background:
-                "radial-gradient(closest-side, oklch(0.7 0.16 55 / 0.5), transparent)",
+              background: "radial-gradient(closest-side, oklch(0.7 0.16 55 / 0.5), transparent)",
             }}
           />
           <div className="relative">
@@ -372,7 +414,9 @@ function HomePage() {
             onSubmit={(e) => e.preventDefault()}
             className="relative flex flex-col sm:flex-row gap-2 sm:gap-3"
           >
-            <label htmlFor="homepage-email" className="sr-only">Email address</label>
+            <label htmlFor="homepage-email" className="sr-only">
+              Email address
+            </label>
             <input
               id="homepage-email"
               type="email"
@@ -381,7 +425,11 @@ function HomePage() {
               aria-label="Email address for workshop newsletter"
               className="flex-1 rounded-full bg-white/10 border border-white/25 px-4 sm:px-5 py-3 sm:py-4 text-xs sm:text-sm text-white placeholder:text-white/70 focus:outline-none focus:border-accent"
             />
-            <button type="submit" className="inline-flex items-center justify-center gap-1.5 sm:gap-2 rounded-full bg-accent hover:bg-accent-hover text-accent-foreground px-5 sm:px-7 py-3 sm:py-4 text-xs sm:text-sm font-semibold transition shrink-0" aria-label="Subscribe to workshop newsletter">
+            <button
+              type="submit"
+              className="inline-flex items-center justify-center gap-1.5 sm:gap-2 rounded-full bg-accent hover:bg-accent-hover text-accent-foreground px-5 sm:px-7 py-3 sm:py-4 text-xs sm:text-sm font-semibold transition shrink-0"
+              aria-label="Subscribe to workshop newsletter"
+            >
               <ShoppingCart className="h-3.5 w-3.5 sm:h-4 sm:w-4" /> Subscribe
             </button>
           </form>
@@ -439,7 +487,10 @@ function ReviewForm() {
         message: `Rating: ${rating}/5\nProduct: ${product.trim() || "Not specified"}\n\nReview:\n${review.trim()}`,
       });
       setSubmitted(true);
-      setRating(0); setName(""); setProduct(""); setReview("");
+      setRating(0);
+      setName("");
+      setProduct("");
+      setReview("");
       setTimeout(() => setSubmitted(false), 5000);
     } catch (err: any) {
       toast.error(err.message ?? "Failed to submit. Please try again.");
@@ -451,7 +502,9 @@ function ReviewForm() {
   return (
     <div className="rounded-2xl sm:rounded-3xl border border-border bg-surface p-6 sm:p-8 md:p-12 grid md:grid-cols-2 gap-8 sm:gap-10 items-start">
       <div>
-        <p className="text-[10px] sm:text-[11px] font-semibold uppercase tracking-[0.25em] sm:tracking-[0.3em] text-accent">Community</p>
+        <p className="text-[10px] sm:text-[11px] font-semibold uppercase tracking-[0.25em] sm:tracking-[0.3em] text-accent">
+          Community
+        </p>
         <h2 className="font-display font-bold text-2xl sm:text-3xl md:text-4xl mt-2 leading-tight">
           Share Your Experience
         </h2>
@@ -487,9 +540,7 @@ function ReviewForm() {
               >
                 <Star
                   className={`h-5 w-5 sm:h-6 sm:w-6 transition ${
-                    (hover || rating) >= n
-                      ? "fill-warning text-warning"
-                      : "text-border"
+                    (hover || rating) >= n ? "fill-warning text-warning" : "text-border"
                   }`}
                 />
               </button>
@@ -523,14 +574,23 @@ function ReviewForm() {
         />
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-4">
           <p className="text-[10px] sm:text-xs text-text-secondary">
-            {submitted ? "Thanks — your review was received!" : "Reviews are moderated before publishing."}
+            {submitted
+              ? "Thanks — your review was received!"
+              : "Reviews are moderated before publishing."}
           </p>
           <button
             type="submit"
             disabled={loading}
             className="inline-flex items-center gap-1.5 sm:gap-2 rounded-full bg-accent hover:bg-accent-hover text-accent-foreground px-5 sm:px-6 py-2.5 sm:py-3 text-xs sm:text-sm font-semibold transition disabled:opacity-60 whitespace-nowrap"
           >
-            {loading ? "Submitting…" : <><span>Submit Review</span><ArrowRight className="h-3.5 w-3.5 sm:h-4 sm:w-4" /></>}
+            {loading ? (
+              "Submitting…"
+            ) : (
+              <>
+                <span>Submit Review</span>
+                <ArrowRight className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+              </>
+            )}
           </button>
         </div>
       </form>

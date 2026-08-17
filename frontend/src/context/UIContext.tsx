@@ -1,11 +1,20 @@
 import { createContext, useContext, useState, type ReactNode } from "react";
 
-interface UIContextValue { cookieOpenSignal: number; openCookiePrefs: () => void; }
+interface UIContextValue {
+  cookieOpenSignal: number;
+  openCookiePrefs: () => void;
+}
 const UIContext = createContext<UIContextValue | null>(null);
 
 export function UIProvider({ children }: { children: ReactNode }) {
   const [cookieOpenSignal, setSignal] = useState(0);
-  return <UIContext.Provider value={{ cookieOpenSignal, openCookiePrefs: () => setSignal((n) => n + 1) }}>{children}</UIContext.Provider>;
+  return (
+    <UIContext.Provider
+      value={{ cookieOpenSignal, openCookiePrefs: () => setSignal((n) => n + 1) }}
+    >
+      {children}
+    </UIContext.Provider>
+  );
 }
 
 export function useUI() {

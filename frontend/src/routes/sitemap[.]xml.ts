@@ -3,18 +3,18 @@ import type {} from "@tanstack/react-start";
 
 // Static paths that never change
 const STATIC_PATHS = [
-  { path: "/",                          changefreq: "daily",   priority: "1.0" },
-  { path: "/shop",                      changefreq: "daily",   priority: "0.9" },
-  { path: "/about-us",                  changefreq: "monthly", priority: "0.5" },
-  { path: "/blog",                      changefreq: "weekly",  priority: "0.6" },
-  { path: "/contact-us",                changefreq: "monthly", priority: "0.5" },
-  { path: "/track-your-order",          changefreq: "monthly", priority: "0.4" },
-  { path: "/privacy-policy",            changefreq: "yearly",  priority: "0.3" },
-  { path: "/returns-refund-policy",     changefreq: "yearly",  priority: "0.4" },
-  { path: "/shipping-policy",           changefreq: "yearly",  priority: "0.4" },
-  { path: "/billing-terms-conditions",  changefreq: "yearly",  priority: "0.3" },
-  { path: "/terms-of-service",          changefreq: "yearly",  priority: "0.3" },
-  { path: "/order-cancellation-policy", changefreq: "yearly",  priority: "0.3" },
+  { path: "/", changefreq: "daily", priority: "1.0" },
+  { path: "/shop", changefreq: "daily", priority: "0.9" },
+  { path: "/about-us", changefreq: "monthly", priority: "0.5" },
+  { path: "/blog", changefreq: "weekly", priority: "0.6" },
+  { path: "/contact-us", changefreq: "monthly", priority: "0.5" },
+  { path: "/track-your-order", changefreq: "monthly", priority: "0.4" },
+  { path: "/privacy-policy", changefreq: "yearly", priority: "0.3" },
+  { path: "/returns-refund-policy", changefreq: "yearly", priority: "0.4" },
+  { path: "/shipping-policy", changefreq: "yearly", priority: "0.4" },
+  { path: "/billing-terms-conditions", changefreq: "yearly", priority: "0.3" },
+  { path: "/terms-of-service", changefreq: "yearly", priority: "0.3" },
+  { path: "/order-cancellation-policy", changefreq: "yearly", priority: "0.3" },
 ];
 
 const API_URL = process.env["VITE_API_URL"] ?? "http://localhost:4000/api";
@@ -24,15 +24,9 @@ function urlEntry(
   loc: string,
   opts: { changefreq?: string; priority?: string; lastmod?: string } = {},
 ): string {
-  const lastmod = opts.lastmod
-    ? `\n    <lastmod>${opts.lastmod}</lastmod>`
-    : "";
-  const changefreq = opts.changefreq
-    ? `\n    <changefreq>${opts.changefreq}</changefreq>`
-    : "";
-  const priority = opts.priority
-    ? `\n    <priority>${opts.priority}</priority>`
-    : "";
+  const lastmod = opts.lastmod ? `\n    <lastmod>${opts.lastmod}</lastmod>` : "";
+  const changefreq = opts.changefreq ? `\n    <changefreq>${opts.changefreq}</changefreq>` : "";
+  const priority = opts.priority ? `\n    <priority>${opts.priority}</priority>` : "";
   return `  <url>\n    <loc>${loc}</loc>${lastmod}${changefreq}${priority}\n  </url>`;
 }
 
@@ -54,7 +48,9 @@ export const Route = createFileRoute("/sitemap.xml")({
           }
         } catch {
           // Backend unavailable during build — sitemap still generates with static paths
-          console.warn("[sitemap] Could not fetch products from API — skipping dynamic product URLs");
+          console.warn(
+            "[sitemap] Could not fetch products from API — skipping dynamic product URLs",
+          );
         }
 
         // ── Fetch live category slugs ─────────────────────────────────────
@@ -68,7 +64,9 @@ export const Route = createFileRoute("/sitemap.xml")({
             categorySlugs = (data.categories ?? []).map((c) => c.slug);
           }
         } catch {
-          console.warn("[sitemap] Could not fetch categories from API — skipping dynamic category URLs");
+          console.warn(
+            "[sitemap] Could not fetch categories from API — skipping dynamic category URLs",
+          );
         }
 
         // ── Build URL entries ─────────────────────────────────────────────

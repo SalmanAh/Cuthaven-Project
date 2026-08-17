@@ -1,6 +1,9 @@
 import { createContext, useContext, useState, type ReactNode } from "react";
 
-interface CartUIContextValue { open: boolean; setOpen: (v: boolean) => void; }
+interface CartUIContextValue {
+  open: boolean;
+  setOpen: (v: boolean) => void;
+}
 const CartUIContext = createContext<CartUIContextValue | null>(null);
 
 export function CartUIProvider({ children }: { children: ReactNode }) {

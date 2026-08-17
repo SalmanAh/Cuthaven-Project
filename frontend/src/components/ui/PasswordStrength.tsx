@@ -10,7 +10,10 @@ export function PasswordStrength({ password }: { password: string }) {
   return (
     <ul className="mt-2 space-y-1">
       {rules.map((r) => (
-        <li key={r.label} className={`flex items-center gap-1.5 text-xs ${r.ok ? "text-success" : "text-text-secondary"}`}>
+        <li
+          key={r.label}
+          className={`flex items-center gap-1.5 text-xs ${r.ok ? "text-success" : "text-text-secondary"}`}
+        >
           <Check className={`h-3 w-3 ${r.ok ? "opacity-100" : "opacity-40"}`} /> {r.label}
         </li>
       ))}

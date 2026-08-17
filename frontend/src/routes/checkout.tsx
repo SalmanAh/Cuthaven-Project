@@ -8,9 +8,18 @@ import { PageHero } from "@/components/ui/PageHero";
 import { useCart } from "@/context/CartContext";
 import { useAuth } from "@/context/AuthContext";
 import {
-  createPaymentIntent, createPayPalOrder, capturePayPalOrder, validateCoupon,
-  getMyAddresses, confirmStripeOrder, createCodOrder, getActiveGatewaysForCheckout,
-  type PaymentIntentResponse, type PayPalOrderResponse, type CustomerAddress, type CodOrderResponse,
+  createPaymentIntent,
+  createPayPalOrder,
+  capturePayPalOrder,
+  validateCoupon,
+  getMyAddresses,
+  confirmStripeOrder,
+  createCodOrder,
+  getActiveGatewaysForCheckout,
+  type PaymentIntentResponse,
+  type PayPalOrderResponse,
+  type CustomerAddress,
+  type CodOrderResponse,
 } from "@/lib/api-client";
 import { toast } from "sonner";
 
@@ -25,20 +34,42 @@ export const Route = createFileRoute("/checkout")({
   component: CheckoutPage,
 });
 
-const REQUIRED_FIELDS = ["firstName", "lastName", "email", "phone", "address", "city", "state", "zip"] as const;
+const REQUIRED_FIELDS = [
+  "firstName",
+  "lastName",
+  "email",
+  "phone",
+  "address",
+  "city",
+  "state",
+  "zip",
+] as const;
 type RequiredField = (typeof REQUIRED_FIELDS)[number];
 type FormState = Record<RequiredField | "business" | "notes", string>;
 
 const emptyForm = (): FormState => ({
-  firstName: "", lastName: "", email: "", phone: "",
-  address: "", city: "", state: "", zip: "",
-  business: "", notes: "",
+  firstName: "",
+  lastName: "",
+  email: "",
+  phone: "",
+  address: "",
+  city: "",
+  state: "",
+  zip: "",
+  business: "",
+  notes: "",
 });
 
 // ─── Field — TOP-LEVEL component. Never define inside another component.
 // Defining inside a parent causes remount on every parent re-render → input loses focus.
 function Field({
-  name, label, type = "text", full = false, form, errors, onChange,
+  name,
+  label,
+  type = "text",
+  full = false,
+  form,
+  errors,
+  onChange,
 }: {
   name: keyof FormState;
   label: string;
@@ -75,7 +106,9 @@ function savedForm(): FormState {
   try {
     const s = typeof window !== "undefined" ? sessionStorage.getItem(FORM_KEY) : null;
     return s ? { ...emptyForm(), ...JSON.parse(s) } : emptyForm();
-  } catch { return emptyForm(); }
+  } catch {
+    return emptyForm();
+  }
 }
 
 // ─── CheckoutPage ──────────────────────────────────────────────────────────
@@ -131,7 +164,11 @@ function CheckoutPage() {
   // ── Coupon state (lives here now, not on cart page) ──────────────────────
   const [couponInput, setCouponInput] = useState("");
   const [couponLoading, setCouponLoading] = useState(false);
-  const [appliedCoupon, setAppliedCoupon] = useState<{ code: string; discountAmount: number; couponId: string } | null>(null);
+  const [appliedCoupon, setAppliedCoupon] = useState<{
+    code: string;
+    discountAmount: number;
+    couponId: string;
+  } | null>(null);
 
   // Load saved addresses for logged-in customers
   useEffect(() => {
@@ -143,7 +180,9 @@ function CheckoutPage() {
 
   // Persist form to sessionStorage on every keystroke
   useEffect(() => {
-    try { sessionStorage.setItem(FORM_KEY, JSON.stringify(form)); } catch {}
+    try {
+      sessionStorage.setItem(FORM_KEY, JSON.stringify(form));
+    } catch {}
   }, [form]);
 
   // Pre-fill form with logged-in user's name and email
@@ -166,20 +205,24 @@ function CheckoutPage() {
   // ── Coupon handlers ──────────────────────────────────────────────────────
   const handleApplyCoupon = async () => {
     if (!couponInput.trim()) return;
-    
+
     // For guests: require email first
     if (!user && !form.email.trim()) {
       toast.error("Please enter your email address above before applying a coupon");
       return;
     }
-    
+
     setCouponLoading(true);
     try {
       // Email from the form (filled in by now since they're on the details step)
       // or fallback to logged-in user's email
       const emailForCheck = form.email || user?.email;
       const result = await validateCoupon(couponInput.trim(), subtotal, emailForCheck);
-      setAppliedCoupon({ code: result.code, discountAmount: result.discountAmount, couponId: result.couponId });
+      setAppliedCoupon({
+        code: result.code,
+        discountAmount: result.discountAmount,
+        couponId: result.couponId,
+      });
       setCouponInput("");
       toast.success(`Coupon "${result.code}" applied — $${result.discountAmount.toFixed(2)} off!`);
     } catch (err: any) {
@@ -199,8 +242,15 @@ function CheckoutPage() {
       <div className="mx-auto max-w-lg px-3 sm:px-4 py-12 sm:py-16 md:py-20 text-center">
         <ShoppingBag className="h-12 w-12 sm:h-14 sm:w-14 text-primary mx-auto mb-3 sm:mb-4" />
         <h2 className="font-display text-xl sm:text-2xl font-bold mb-2">Your cart is empty</h2>
-        <p className="text-text-secondary text-sm sm:text-base mb-4 sm:mb-6">Add some tools before checking out.</p>
-        <Link to="/shop" className="btn-primary text-sm sm:text-base min-h-[44px] inline-flex items-center justify-center">Shop Now</Link>
+        <p className="text-text-secondary text-sm sm:text-base mb-4 sm:mb-6">
+          Add some tools before checking out.
+        </p>
+        <Link
+          to="/shop"
+          className="btn-primary text-sm sm:text-base min-h-[44px] inline-flex items-center justify-center"
+        >
+          Shop Now
+        </Link>
       </div>
     );
   }
@@ -224,7 +274,9 @@ function CheckoutPage() {
 
   const validate = () => {
     const newErrors: Partial<Record<RequiredField, string>> = {};
-    REQUIRED_FIELDS.forEach((k) => { if (!form[k]?.trim()) newErrors[k] = "Required"; });
+    REQUIRED_FIELDS.forEach((k) => {
+      if (!form[k]?.trim()) newErrors[k] = "Required";
+    });
     if (form.email && !/^\S+@\S+\.\S+$/.test(form.email)) newErrors.email = "Invalid email";
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
@@ -237,21 +289,44 @@ function CheckoutPage() {
     try {
       const checkoutItems = items.map((i) => ({ productId: i.product.id, quantity: i.quantity }));
       const shippingAddr = {
-        firstName: form.firstName, lastName: form.lastName, email: form.email,
-        phone: form.phone, address: form.address, city: form.city,
-        state: form.state, zip: form.zip, country: "US",
+        firstName: form.firstName,
+        lastName: form.lastName,
+        email: form.email,
+        phone: form.phone,
+        address: form.address,
+        city: form.city,
+        state: form.state,
+        zip: form.zip,
+        country: "US",
       };
 
       if (paymentMethod === "cod") {
-        const data = await createCodOrder(checkoutItems, shippingAddr, form.notes || undefined, appliedCoupon?.code || undefined);
-        try { sessionStorage.removeItem(FORM_KEY); } catch {}
+        const data = await createCodOrder(
+          checkoutItems,
+          shippingAddr,
+          form.notes || undefined,
+          appliedCoupon?.code || undefined,
+        );
+        try {
+          sessionStorage.removeItem(FORM_KEY);
+        } catch {}
         navigate({ to: "/order-confirmation", search: { orderId: data.orderId } });
       } else if (paymentMethod === "paypal") {
-        const data = await createPayPalOrder(checkoutItems, shippingAddr, form.notes || undefined, appliedCoupon?.code || undefined);
+        const data = await createPayPalOrder(
+          checkoutItems,
+          shippingAddr,
+          form.notes || undefined,
+          appliedCoupon?.code || undefined,
+        );
         setPaypalData(data);
         setStep("payment");
       } else {
-        const data = await createPaymentIntent(checkoutItems, shippingAddr, form.notes || undefined, appliedCoupon?.code || undefined);
+        const data = await createPaymentIntent(
+          checkoutItems,
+          shippingAddr,
+          form.notes || undefined,
+          appliedCoupon?.code || undefined,
+        );
         setIntentData(data);
         setStep("payment");
       }
@@ -266,12 +341,15 @@ function CheckoutPage() {
     <div>
       <PageHero title="Checkout" />
       <div className="mx-auto max-w-7xl px-3 sm:px-4 py-6 sm:py-8 md:py-10">
-
         {/* Step indicator */}
         <div className="flex items-center justify-center gap-1.5 sm:gap-2 mb-6 sm:mb-8 text-xs sm:text-sm">
           <span className="text-primary font-semibold">1. Cart ✓</span>
           <span className="text-text-muted">→</span>
-          <span className={step === "details" ? "text-accent font-semibold" : "text-primary font-semibold"}>
+          <span
+            className={
+              step === "details" ? "text-accent font-semibold" : "text-primary font-semibold"
+            }
+          >
             2. Details {step === "payment" && "✓"}
           </span>
           <span className="text-text-muted">→</span>
@@ -281,14 +359,15 @@ function CheckoutPage() {
         </div>
 
         <div className="grid lg:grid-cols-[1fr_400px] gap-6 sm:gap-8">
-
           {/* Left panel */}
           {step === "details" ? (
             <form onSubmit={handleDetailsSubmit} className="card-surface p-4 sm:p-5 md:p-6 lg:p-8">
               {/* ── Saved address selector (logged-in customers only) ── */}
               {user && savedAddresses.length > 0 && (
                 <div className="mb-5 sm:mb-6 p-3 sm:p-4 rounded-xl bg-muted/40 border border-border">
-                  <p className="text-xs sm:text-sm font-semibold mb-2 sm:mb-3">Use a saved address</p>
+                  <p className="text-xs sm:text-sm font-semibold mb-2 sm:mb-3">
+                    Use a saved address
+                  </p>
                   <div className="grid sm:grid-cols-2 gap-2">
                     {savedAddresses.map((addr) => (
                       <button
@@ -298,41 +377,86 @@ function CheckoutPage() {
                           setForm((f) => ({
                             ...f,
                             firstName: addr.firstName,
-                            lastName:  addr.lastName,
-                            address:   addr.address,
-                            city:      addr.city,
-                            state:     addr.state,
-                            zip:       addr.zip,
+                            lastName: addr.lastName,
+                            address: addr.address,
+                            city: addr.city,
+                            state: addr.state,
+                            zip: addr.zip,
                           }));
                           setErrors({});
                           toast.success(`Address "${addr.label}" applied`);
                         }}
                         className="text-left p-2.5 sm:p-3 rounded-lg border border-border hover:border-primary bg-surface transition text-xs sm:text-sm touch-manipulation min-h-[44px]"
                       >
-                        <p className="font-semibold text-[10px] sm:text-xs text-primary mb-0.5 sm:mb-1">{addr.label}</p>
+                        <p className="font-semibold text-[10px] sm:text-xs text-primary mb-0.5 sm:mb-1">
+                          {addr.label}
+                        </p>
                         <p className="text-text-secondary leading-snug text-xs sm:text-sm">
-                          {addr.firstName} {addr.lastName}<br />
+                          {addr.firstName} {addr.lastName}
+                          <br />
                           {addr.address}, {addr.city}, {addr.state} {addr.zip}
                         </p>
                       </button>
                     ))}
                   </div>
-                  <p className="text-[10px] sm:text-xs text-text-secondary mt-2">Selecting an address fills the form — you can still edit any field.</p>
+                  <p className="text-[10px] sm:text-xs text-text-secondary mt-2">
+                    Selecting an address fills the form — you can still edit any field.
+                  </p>
                 </div>
               )}
 
-              <h2 className="font-display text-xl sm:text-2xl font-bold mb-4 sm:mb-6">Billing Details</h2>
+              <h2 className="font-display text-xl sm:text-2xl font-bold mb-4 sm:mb-6">
+                Billing Details
+              </h2>
               <div className="grid md:grid-cols-2 gap-3 sm:gap-4">
-                <Field name="firstName" label="First Name" form={form} errors={errors} onChange={upd} />
-                <Field name="lastName" label="Last Name" form={form} errors={errors} onChange={upd} />
-                <Field name="email" label="Email" type="email" form={form} errors={errors} onChange={upd} />
-                <Field name="phone" label="Phone" type="tel" form={form} errors={errors} onChange={upd} />
+                <Field
+                  name="firstName"
+                  label="First Name"
+                  form={form}
+                  errors={errors}
+                  onChange={upd}
+                />
+                <Field
+                  name="lastName"
+                  label="Last Name"
+                  form={form}
+                  errors={errors}
+                  onChange={upd}
+                />
+                <Field
+                  name="email"
+                  label="Email"
+                  type="email"
+                  form={form}
+                  errors={errors}
+                  onChange={upd}
+                />
+                <Field
+                  name="phone"
+                  label="Phone"
+                  type="tel"
+                  form={form}
+                  errors={errors}
+                  onChange={upd}
+                />
                 <div className="md:col-span-2">
-                  <label className="block text-xs sm:text-sm font-medium mb-1.5">Business Name (optional)</label>
-                  <input value={form.business} onChange={(e) => upd("business", e.target.value)}
-                    className="w-full px-3 py-2.5 rounded-lg border border-border text-xs sm:text-sm focus:outline-none focus:border-primary min-h-[44px]" />
+                  <label className="block text-xs sm:text-sm font-medium mb-1.5">
+                    Business Name (optional)
+                  </label>
+                  <input
+                    value={form.business}
+                    onChange={(e) => upd("business", e.target.value)}
+                    className="w-full px-3 py-2.5 rounded-lg border border-border text-xs sm:text-sm focus:outline-none focus:border-primary min-h-[44px]"
+                  />
                 </div>
-                <Field name="address" label="Address" full form={form} errors={errors} onChange={upd} />
+                <Field
+                  name="address"
+                  label="Address"
+                  full
+                  form={form}
+                  errors={errors}
+                  onChange={upd}
+                />
                 <Field name="city" label="City" form={form} errors={errors} onChange={upd} />
                 <Field name="state" label="State" form={form} errors={errors} onChange={upd} />
                 <Field name="zip" label="ZIP" form={form} errors={errors} onChange={upd} />
@@ -343,9 +467,15 @@ function CheckoutPage() {
                   </select>
                 </div>
                 <div className="md:col-span-2">
-                  <label className="block text-xs sm:text-sm font-medium mb-1.5">Order notes (optional)</label>
-                  <textarea rows={3} value={form.notes} onChange={(e) => upd("notes", e.target.value)}
-                    className="w-full px-3 py-2.5 rounded-lg border border-border text-xs sm:text-sm focus:outline-none focus:border-primary" />
+                  <label className="block text-xs sm:text-sm font-medium mb-1.5">
+                    Order notes (optional)
+                  </label>
+                  <textarea
+                    rows={3}
+                    value={form.notes}
+                    onChange={(e) => upd("notes", e.target.value)}
+                    className="w-full px-3 py-2.5 rounded-lg border border-border text-xs sm:text-sm focus:outline-none focus:border-primary"
+                  />
                 </div>
               </div>
 
@@ -378,7 +508,11 @@ function CheckoutPage() {
                           : "border-border text-text-secondary hover:border-[#003087]/40"
                       }`}
                     >
-                      <img src="https://www.paypalobjects.com/webstatic/icon/pp258.png" alt="PayPal" className="h-4 w-4 sm:h-5 sm:w-5" />
+                      <img
+                        src="https://www.paypalobjects.com/webstatic/icon/pp258.png"
+                        alt="PayPal"
+                        className="h-4 w-4 sm:h-5 sm:w-5"
+                      />
                       PayPal
                     </button>
                   )}
@@ -403,7 +537,8 @@ function CheckoutPage() {
                 )}
                 {!stripePromise && !paypalClientId && (
                   <p className="text-[10px] sm:text-xs text-warning mt-2">
-                    Online payment methods are currently unavailable. Only Cash on Delivery is available.
+                    Online payment methods are currently unavailable. Only Cash on Delivery is
+                    available.
                   </p>
                 )}
               </div>
@@ -415,9 +550,13 @@ function CheckoutPage() {
                 </p>
                 {appliedCoupon ? (
                   <div className="flex items-center justify-between bg-success/10 border border-success/30 rounded-lg px-3 py-2.5 min-h-[44px]">
-                    <span className="text-xs sm:text-sm font-mono font-semibold text-success">{appliedCoupon.code}</span>
+                    <span className="text-xs sm:text-sm font-mono font-semibold text-success">
+                      {appliedCoupon.code}
+                    </span>
                     <div className="flex items-center gap-2 sm:gap-3">
-                      <span className="text-xs sm:text-sm font-semibold text-success">−${appliedCoupon.discountAmount.toFixed(2)}</span>
+                      <span className="text-xs sm:text-sm font-semibold text-success">
+                        −${appliedCoupon.discountAmount.toFixed(2)}
+                      </span>
                       <button
                         type="button"
                         onClick={handleRemoveCoupon}
@@ -433,7 +572,9 @@ function CheckoutPage() {
                     <input
                       value={couponInput}
                       onChange={(e) => setCouponInput(e.target.value.toUpperCase())}
-                      onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), handleApplyCoupon())}
+                      onKeyDown={(e) =>
+                        e.key === "Enter" && (e.preventDefault(), handleApplyCoupon())
+                      }
                       placeholder="Enter coupon code"
                       className="flex-1 px-3 py-2.5 rounded-lg border border-border text-xs sm:text-sm focus:outline-none focus:border-primary font-mono uppercase min-h-[44px]"
                     />
@@ -449,26 +590,41 @@ function CheckoutPage() {
                 )}
               </div>
 
-              <button type="submit" className="btn-primary mt-5 sm:mt-6 w-full text-sm sm:text-base min-h-[44px]" disabled={creatingIntent}>
+              <button
+                type="submit"
+                className="btn-primary mt-5 sm:mt-6 w-full text-sm sm:text-base min-h-[44px]"
+                disabled={creatingIntent}
+              >
                 {creatingIntent
                   ? "Processing…"
                   : paymentMethod === "cod"
-                  ? "Confirm Order →"
-                  : "Continue to Payment →"}
+                    ? "Confirm Order →"
+                    : "Continue to Payment →"}
               </button>
             </form>
           ) : (
             <div className="card-surface p-4 sm:p-5 md:p-6 lg:p-8">
               <div className="flex items-center justify-between mb-5 sm:mb-6">
                 <h2 className="font-display text-xl sm:text-2xl font-bold">Payment</h2>
-                <button onClick={() => { setStep("details"); setIntentData(null); setPaypalData(null); setCodData(null); }} className="text-xs sm:text-sm text-primary hover:underline">
+                <button
+                  onClick={() => {
+                    setStep("details");
+                    setIntentData(null);
+                    setPaypalData(null);
+                    setCodData(null);
+                  }}
+                  className="text-xs sm:text-sm text-primary hover:underline"
+                >
                   ← Edit details
                 </button>
               </div>
 
               {/* Stripe */}
               {intentData && stripePromise && (
-                <Elements stripe={stripePromise} options={{ clientSecret: intentData.clientSecret }}>
+                <Elements
+                  stripe={stripePromise}
+                  options={{ clientSecret: intentData.clientSecret }}
+                >
                   <StripePaymentForm
                     intentData={intentData}
                     onSuccess={async (paymentIntentId) => {
@@ -479,7 +635,10 @@ function CheckoutPage() {
                       } catch {
                         // Webhook will handle it — redirect to confirmation with paymentIntentId as fallback
                         sessionStorage.removeItem(FORM_KEY);
-                        navigate({ to: "/order-confirmation", search: { orderId: paymentIntentId } });
+                        navigate({
+                          to: "/order-confirmation",
+                          search: { orderId: paymentIntentId },
+                        });
                       }
                     }}
                   />
@@ -492,7 +651,9 @@ function CheckoutPage() {
                   <PayPalPaymentForm
                     paypalData={paypalData}
                     onSuccess={(orderId) => {
-                      try { sessionStorage.removeItem(FORM_KEY); } catch {}
+                      try {
+                        sessionStorage.removeItem(FORM_KEY);
+                      } catch {}
                       navigate({ to: "/order-confirmation", search: { orderId } });
                     }}
                   />
@@ -507,8 +668,12 @@ function CheckoutPage() {
             <div className="space-y-1.5 sm:space-y-2 text-xs sm:text-sm border-b border-border pb-3 sm:pb-4">
               {items.map(({ product, quantity }) => (
                 <div key={product.id} className="flex justify-between gap-2">
-                  <span className="line-clamp-1 flex-1">{product.name} × {quantity}</span>
-                  <span className="font-semibold shrink-0">${((product.salePrice ?? product.price) * quantity).toFixed(2)}</span>
+                  <span className="line-clamp-1 flex-1">
+                    {product.name} × {quantity}
+                  </span>
+                  <span className="font-semibold shrink-0">
+                    ${((product.salePrice ?? product.price) * quantity).toFixed(2)}
+                  </span>
                 </div>
               ))}
             </div>
@@ -525,13 +690,19 @@ function CheckoutPage() {
               </div>
               {(intentData ?? paypalData) && (intentData ?? paypalData)!.discountAmount > 0 && (
                 <div className="flex justify-between text-success">
-                  <span className="flex items-center gap-1"><Tag className="h-3 w-3 sm:h-3.5 sm:w-3.5" /> Coupon ({appliedCoupon?.code})</span>
-                  <span className="font-semibold">−${(intentData ?? paypalData)!.discountAmount.toFixed(2)}</span>
+                  <span className="flex items-center gap-1">
+                    <Tag className="h-3 w-3 sm:h-3.5 sm:w-3.5" /> Coupon ({appliedCoupon?.code})
+                  </span>
+                  <span className="font-semibold">
+                    −${(intentData ?? paypalData)!.discountAmount.toFixed(2)}
+                  </span>
                 </div>
               )}
               {!intentData && !paypalData && appliedCoupon && (
                 <div className="flex justify-between text-success">
-                  <span className="flex items-center gap-1"><Tag className="h-3 w-3 sm:h-3.5 sm:w-3.5" /> Coupon ({appliedCoupon.code})</span>
+                  <span className="flex items-center gap-1">
+                    <Tag className="h-3 w-3 sm:h-3.5 sm:w-3.5" /> Coupon ({appliedCoupon.code})
+                  </span>
                   <span className="font-semibold">−${appliedCoupon.discountAmount.toFixed(2)}</span>
                 </div>
               )}
@@ -540,18 +711,24 @@ function CheckoutPage() {
                   <span className="text-text-secondary">
                     Tax
                     {intentData.taxRate > 0 && (
-                      <span className="ml-1 text-[10px] sm:text-xs">({(intentData.taxRate * 100).toFixed(2)}%{intentData.taxJurisdiction ? ` · ${intentData.taxJurisdiction}` : ""})</span>
+                      <span className="ml-1 text-[10px] sm:text-xs">
+                        ({(intentData.taxRate * 100).toFixed(2)}%
+                        {intentData.taxJurisdiction ? ` · ${intentData.taxJurisdiction}` : ""})
+                      </span>
                     )}
                   </span>
                   <span>${intentData.taxAmount.toFixed(2)}</span>
                 </div>
               )}
-              {intentData && intentData.taxAmount === 0 && intentData.taxJurisdiction && intentData.taxJurisdiction !== "No tax" && (
-                <div className="flex justify-between text-[10px] sm:text-xs text-text-secondary">
-                  <span>Tax ({intentData.taxJurisdiction})</span>
-                  <span>$0.00</span>
-                </div>
-              )}
+              {intentData &&
+                intentData.taxAmount === 0 &&
+                intentData.taxJurisdiction &&
+                intentData.taxJurisdiction !== "No tax" && (
+                  <div className="flex justify-between text-[10px] sm:text-xs text-text-secondary">
+                    <span>Tax ({intentData.taxJurisdiction})</span>
+                    <span>$0.00</span>
+                  </div>
+                )}
               {paypalData && paypalData.taxAmount > 0 && (
                 <div className="flex justify-between">
                   <span className="text-text-secondary">Tax</span>
@@ -575,7 +752,10 @@ function CheckoutPage() {
 
 // ─── PayPalPaymentForm ─────────────────────────────────────────────────────
 
-function PayPalPaymentForm({ paypalData, onSuccess }: {
+function PayPalPaymentForm({
+  paypalData,
+  onSuccess,
+}: {
   paypalData: PayPalOrderResponse;
   onSuccess: (orderId: string) => void;
 }) {
@@ -587,7 +767,9 @@ function PayPalPaymentForm({ paypalData, onSuccess }: {
       <div className="space-y-1 text-xs sm:text-sm text-text-secondary border-b border-border pb-3 sm:pb-4">
         <div className="flex justify-between">
           <span>Order total</span>
-          <span className="font-bold text-foreground text-sm sm:text-base">${paypalData.total.toFixed(2)}</span>
+          <span className="font-bold text-foreground text-sm sm:text-base">
+            ${paypalData.total.toFixed(2)}
+          </span>
         </div>
         <div className="flex justify-between">
           <span>Order #</span>
@@ -596,7 +778,9 @@ function PayPalPaymentForm({ paypalData, onSuccess }: {
       </div>
 
       {error && (
-        <div className="rounded-lg bg-destructive/10 px-3 sm:px-4 py-2.5 sm:py-3 text-xs sm:text-sm text-destructive">{error}</div>
+        <div className="rounded-lg bg-destructive/10 px-3 sm:px-4 py-2.5 sm:py-3 text-xs sm:text-sm text-destructive">
+          {error}
+        </div>
       )}
 
       {/* PayPal buttons — rendered by PayPal JS SDK */}
@@ -605,14 +789,19 @@ function PayPalPaymentForm({ paypalData, onSuccess }: {
         createOrder={async () => paypalData.paypalOrderId}
         onApprove={async () => {
           try {
-            const result = await capturePayPalOrder(paypalData.paypalOrderId, paypalData._checkoutData);
+            const result = await capturePayPalOrder(
+              paypalData.paypalOrderId,
+              paypalData._checkoutData,
+            );
             if (result.success) {
               onSuccess(result.orderId);
             } else {
               setError("Payment capture failed. Please contact support.");
             }
           } catch (err) {
-            setError(err instanceof Error ? err.message : "PayPal payment failed. Please try again.");
+            setError(
+              err instanceof Error ? err.message : "PayPal payment failed. Please try again.",
+            );
           }
         }}
         onError={(err) => {
@@ -631,7 +820,10 @@ function PayPalPaymentForm({ paypalData, onSuccess }: {
   );
 }
 
-function StripePaymentForm({ intentData, onSuccess }: {
+function StripePaymentForm({
+  intentData,
+  onSuccess,
+}: {
   intentData: PaymentIntentResponse;
   onSuccess: (paymentIntentId: string) => Promise<void>;
 }) {
@@ -670,18 +862,27 @@ function StripePaymentForm({ intentData, onSuccess }: {
         <PaymentElement />
       </div>
       {error && (
-        <div className="rounded-lg bg-destructive/10 px-3 sm:px-4 py-2.5 sm:py-3 text-xs sm:text-sm text-destructive">{error}</div>
+        <div className="rounded-lg bg-destructive/10 px-3 sm:px-4 py-2.5 sm:py-3 text-xs sm:text-sm text-destructive">
+          {error}
+        </div>
       )}
       <div className="space-y-1 text-xs sm:text-sm text-text-secondary border-t border-border pt-3 sm:pt-4">
         <div className="flex justify-between">
           <span>Order total</span>
-          <span className="font-bold text-foreground text-sm sm:text-base">${intentData.total.toFixed(2)}</span>
+          <span className="font-bold text-foreground text-sm sm:text-base">
+            ${intentData.total.toFixed(2)}
+          </span>
         </div>
         <div className="flex justify-between">
-          <span>Order #</span><span className="font-mono">{intentData.orderNumber}</span>
+          <span>Order #</span>
+          <span className="font-mono">{intentData.orderNumber}</span>
         </div>
       </div>
-      <button type="submit" disabled={!stripe || !elements || loading} className="btn-primary w-full text-sm sm:text-base min-h-[44px]">
+      <button
+        type="submit"
+        disabled={!stripe || !elements || loading}
+        className="btn-primary w-full text-sm sm:text-base min-h-[44px]"
+      >
         {loading ? "Processing…" : `Pay $${intentData.total.toFixed(2)}`}
       </button>
       <p className="flex items-center gap-1.5 text-[10px] sm:text-xs text-text-secondary justify-center">

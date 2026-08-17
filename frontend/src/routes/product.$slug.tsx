@@ -1,10 +1,30 @@
 import { createFileRoute, Link, notFound } from "@tanstack/react-router";
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Heart, Minus, Plus, ShoppingCart, Truck, RotateCcw, Lock, Share2, Star, Package, CheckCircle2 } from "lucide-react";
+import {
+  Heart,
+  Minus,
+  Plus,
+  ShoppingCart,
+  Truck,
+  RotateCcw,
+  Lock,
+  Share2,
+  Star,
+  Package,
+  CheckCircle2,
+} from "lucide-react";
 import { PageHero } from "@/components/ui/PageHero";
 import { ProductCard } from "@/components/ui/ProductCard";
-import { getProductBySlug, getProducts, getProductReviews, submitReview, checkCanReview, type ReviewItem, type CanReviewResult } from "@/lib/api-client";
+import {
+  getProductBySlug,
+  getProducts,
+  getProductReviews,
+  submitReview,
+  checkCanReview,
+  type ReviewItem,
+  type CanReviewResult,
+} from "@/lib/api-client";
 import { useCart } from "@/context/CartContext";
 import { useWishlist } from "@/context/WishlistContext";
 import { useAuth } from "@/context/AuthContext";
@@ -17,9 +37,15 @@ export const Route = createFileRoute("/product/$slug")({
     return {
       meta: [
         { title: `${humanName} — CutHaven` },
-        { name: "description", content: `Buy ${humanName} at CutHaven. Free US shipping over $350, 40-day returns, 12-month warranty.` },
+        {
+          name: "description",
+          content: `Buy ${humanName} at CutHaven. Free US shipping over $350, 40-day returns, 12-month warranty.`,
+        },
         { property: "og:title", content: `${humanName} — CutHaven` },
-        { property: "og:description", content: `Buy ${humanName} at CutHaven. Free US shipping over $350, 40-day returns, 12-month warranty.` },
+        {
+          property: "og:description",
+          content: `Buy ${humanName} at CutHaven. Free US shipping over $350, 40-day returns, 12-month warranty.`,
+        },
         { property: "og:type", content: "product" },
       ],
     };
@@ -33,11 +59,16 @@ const STORE_URL = import.meta.env.VITE_STORE_URL ?? "https://www.cuthaven.com";
 
 function gmcAvailability(avail: string): string {
   switch (avail) {
-    case "in_stock":     return "https://schema.org/InStock";
-    case "out_of_stock": return "https://schema.org/OutOfStock";
-    case "preorder":     return "https://schema.org/PreOrder";
-    case "backorder":    return "https://schema.org/BackOrder";
-    default:             return "https://schema.org/InStock";
+    case "in_stock":
+      return "https://schema.org/InStock";
+    case "out_of_stock":
+      return "https://schema.org/OutOfStock";
+    case "preorder":
+      return "https://schema.org/PreOrder";
+    case "backorder":
+      return "https://schema.org/BackOrder";
+    default:
+      return "https://schema.org/InStock";
   }
 }
 
@@ -50,8 +81,8 @@ function buildProductJsonLd(product: Product, slug: string): object {
     "@type": "Product",
     name: product.name,
     description: product.shortDescription || product.description,
-    ...(product.sku    ? { sku: product.sku }    : {}),
-    ...(product.brand  ? { brand: { "@type": "Brand", name: product.brand } } : {}),
+    ...(product.sku ? { sku: product.sku } : {}),
+    ...(product.brand ? { brand: { "@type": "Brand", name: product.brand } } : {}),
     image: images,
     url: `${STORE_URL}/product/${slug}`,
     offers: {
@@ -79,7 +110,7 @@ function buildProductJsonLd(product: Product, slug: string): object {
         deliveryTime: {
           "@type": "ShippingDeliveryTime",
           handlingTime: { "@type": "QuantitativeValue", minValue: 0, maxValue: 1, unitCode: "DAY" },
-          transitTime:  { "@type": "QuantitativeValue", minValue: 5, maxValue: 8, unitCode: "DAY" },
+          transitTime: { "@type": "QuantitativeValue", minValue: 5, maxValue: 8, unitCode: "DAY" },
         },
       },
       hasMerchantReturnPolicy: {
@@ -110,8 +141,8 @@ function buildPdpBreadcrumbJsonLd(product: Product): object {
     "@context": "https://schema.org",
     "@type": "BreadcrumbList",
     itemListElement: [
-      { "@type": "ListItem", position: 1, name: "Home",  item: STORE_URL },
-      { "@type": "ListItem", position: 2, name: "Shop",  item: `${STORE_URL}/shop` },
+      { "@type": "ListItem", position: 1, name: "Home", item: STORE_URL },
+      { "@type": "ListItem", position: 2, name: "Shop", item: `${STORE_URL}/shop` },
       ...(product.category
         ? [{ "@type": "ListItem", position: 3, name: product.category, item: `${STORE_URL}/shop` }]
         : []),
@@ -128,7 +159,11 @@ function ProductPage() {
   const { addItem } = useCart();
   const { toggle, has } = useWishlist();
 
-  const { data: product, isLoading, isError } = useQuery({
+  const {
+    data: product,
+    isLoading,
+    isError,
+  } = useQuery({
     queryKey: ["product", slug],
     queryFn: () => getProductBySlug(slug),
   });
@@ -155,7 +190,9 @@ function ProductPage() {
         <Package className="h-14 w-14 text-text-secondary" />
         <h1 className="font-display text-2xl font-bold">Product not found</h1>
         <p className="text-text-secondary">This product doesn't exist or has been removed.</p>
-        <Link to="/shop" className="btn-primary">Back to Shop</Link>
+        <Link to="/shop" className="btn-primary">
+          Back to Shop
+        </Link>
       </div>
     );
   }
@@ -166,7 +203,7 @@ function ProductPage() {
     .slice(0, 4);
 
   // ── Structured data (injected as <script type="application/ld+json"> in <head>) ──
-  const productJsonLd   = buildProductJsonLd(product, slug);
+  const productJsonLd = buildProductJsonLd(product, slug);
   const breadcrumbJsonLd = buildPdpBreadcrumbJsonLd(product);
 
   return (
@@ -180,9 +217,7 @@ function ProductPage() {
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: JSON.stringify(breadcrumbJsonLd) }}
       />
-      <PageHero
-        title={product.name}
-      />
+      <PageHero title={product.name} />
 
       <div className="mx-auto max-w-7xl px-3 sm:px-4 py-6 sm:py-8 md:py-10">
         <div className="grid lg:grid-cols-2 gap-6 sm:gap-8 md:gap-10">
@@ -216,26 +251,39 @@ function ProductPage() {
               {product.brand && <span>{product.brand} · </span>}
               {product.category || "Product"}
             </p>
-            <h1 className="font-display text-2xl sm:text-3xl md:text-4xl font-bold mt-2">{product.name}</h1>
+            <h1 className="font-display text-2xl sm:text-3xl md:text-4xl font-bold mt-2">
+              {product.name}
+            </h1>
 
             <div className="flex items-center gap-2 mt-2 sm:mt-3 text-xs sm:text-sm">
               <div className="flex text-warning">
                 {[...Array(5)].map((_, i) => (
-                  <Star key={i} className={`h-3.5 w-3.5 sm:h-4 sm:w-4 ${i < Math.round(product.rating) ? "fill-current" : ""}`} />
+                  <Star
+                    key={i}
+                    className={`h-3.5 w-3.5 sm:h-4 sm:w-4 ${i < Math.round(product.rating) ? "fill-current" : ""}`}
+                  />
                 ))}
               </div>
               <span className="text-text-secondary text-xs sm:text-sm">
-                {product.rating > 0 ? `${product.rating} (${product.reviewCount} reviews)` : "No reviews yet"}
+                {product.rating > 0
+                  ? `${product.rating} (${product.reviewCount} reviews)`
+                  : "No reviews yet"}
               </span>
             </div>
 
             <div className="flex items-baseline gap-2 sm:gap-3 mt-4 sm:mt-5">
-              <span className="text-accent text-2xl sm:text-3xl font-bold">${price.toFixed(2)}</span>
+              <span className="text-accent text-2xl sm:text-3xl font-bold">
+                ${price.toFixed(2)}
+              </span>
               {product.salePrice && (
-                <span className="text-text-muted line-through text-sm sm:text-base">${product.price.toFixed(2)}</span>
+                <span className="text-text-muted line-through text-sm sm:text-base">
+                  ${product.price.toFixed(2)}
+                </span>
               )}
             </div>
-            <p className="text-xs sm:text-sm text-success mt-1">Free shipping on orders over $350</p>
+            <p className="text-xs sm:text-sm text-success mt-1">
+              Free shipping on orders over $350
+            </p>
 
             <p className="mt-4 sm:mt-6 text-text-secondary leading-relaxed text-sm sm:text-base">
               {product.shortDescription}
@@ -250,7 +298,9 @@ function ProductPage() {
                 >
                   <Minus className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
                 </button>
-                <span className="w-9 sm:w-10 text-center font-semibold text-sm sm:text-base">{qty}</span>
+                <span className="w-9 sm:w-10 text-center font-semibold text-sm sm:text-base">
+                  {qty}
+                </span>
                 <button
                   onClick={() => setQty((q) => Math.min(maxQty, q + 1))}
                   disabled={qty >= maxQty}
@@ -301,14 +351,25 @@ function ProductPage() {
                 className={`h-11 w-11 sm:h-11 sm:w-11 rounded-full border border-border grid place-items-center hover:border-primary transition touch-manipulation ${has(product.id) ? "text-destructive" : ""}`}
                 aria-label="Wishlist"
               >
-                <Heart className={`h-3.5 w-3.5 sm:h-4 sm:w-4 ${has(product.id) ? "fill-current" : ""}`} />
+                <Heart
+                  className={`h-3.5 w-3.5 sm:h-4 sm:w-4 ${has(product.id) ? "fill-current" : ""}`}
+                />
               </button>
             </div>
 
             <div className="mt-6 sm:mt-8 border-t border-border pt-4 sm:pt-5 space-y-1.5 sm:space-y-2 text-xs sm:text-sm">
-              <p className="flex gap-2"><Truck className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-primary shrink-0 mt-0.5" /> Free shipping on orders over $350</p>
-              <p className="flex gap-2"><RotateCcw className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-primary shrink-0 mt-0.5" /> 40-day easy returns</p>
-              <p className="flex gap-2"><Lock className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-primary shrink-0 mt-0.5" /> Secure &amp; safe checkout</p>
+              <p className="flex gap-2">
+                <Truck className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-primary shrink-0 mt-0.5" /> Free
+                shipping on orders over $350
+              </p>
+              <p className="flex gap-2">
+                <RotateCcw className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-primary shrink-0 mt-0.5" />{" "}
+                40-day easy returns
+              </p>
+              <p className="flex gap-2">
+                <Lock className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-primary shrink-0 mt-0.5" /> Secure
+                &amp; safe checkout
+              </p>
             </div>
 
             <div className="mt-5 sm:mt-6 flex items-center gap-2 text-xs sm:text-sm text-text-secondary">
@@ -326,7 +387,11 @@ function ProductPage() {
                 onClick={() => setTab(t)}
                 className={`px-3 sm:px-4 md:px-5 py-2 sm:py-3 text-xs sm:text-sm font-semibold border-b-2 transition whitespace-nowrap ${tab === t ? "border-accent text-primary" : "border-transparent text-text-secondary hover:text-foreground"}`}
               >
-                {t === "desc" ? "Description" : t === "specs" ? "Features" : `Reviews (${product.reviewCount})`}
+                {t === "desc"
+                  ? "Description"
+                  : t === "specs"
+                    ? "Features"
+                    : `Reviews (${product.reviewCount})`}
               </button>
             ))}
           </div>
@@ -346,22 +411,26 @@ function ProductPage() {
                     </li>
                   ))
                 ) : (
-                  <li className="text-xs sm:text-sm text-text-secondary">No specifications listed.</li>
+                  <li className="text-xs sm:text-sm text-text-secondary">
+                    No specifications listed.
+                  </li>
                 )}
               </ul>
             )}
-            {tab === "reviews" && (
-              <ReviewsTab productSlug={slug} productId={product.id} />
-            )}
+            {tab === "reviews" && <ReviewsTab productSlug={slug} productId={product.id} />}
           </div>
         </div>
 
         {/* ── Related products ── */}
         {related.length > 0 && (
           <section className="mt-10 sm:mt-12 md:mt-14">
-            <h2 className="font-display text-xl sm:text-2xl font-bold mb-4 sm:mb-6">You May Also Like</h2>
+            <h2 className="font-display text-xl sm:text-2xl font-bold mb-4 sm:mb-6">
+              You May Also Like
+            </h2>
             <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 sm:gap-4 md:gap-5">
-              {related.map((p) => <ProductCard key={p.id} product={p} />)}
+              {related.map((p) => (
+                <ProductCard key={p.id} product={p} />
+              ))}
             </div>
           </section>
         )}
@@ -375,8 +444,11 @@ function ProductPage() {
 function StarRow({ rating, size = 4 }: { rating: number; size?: number }) {
   return (
     <div className="flex text-warning">
-      {[1,2,3,4,5].map((n) => (
-        <Star key={n} className={`h-${size} w-${size} ${n <= rating ? "fill-current" : "stroke-current opacity-30"}`} />
+      {[1, 2, 3, 4, 5].map((n) => (
+        <Star
+          key={n}
+          className={`h-${size} w-${size} ${n <= rating ? "fill-current" : "stroke-current opacity-30"}`}
+        />
       ))}
     </div>
   );
@@ -395,18 +467,20 @@ function ReviewsTab({ productSlug, productId }: { productSlug: string; productId
 
   const { data, isLoading, refetch } = useQuery({
     queryKey: ["reviews", productSlug],
-    queryFn:  () => getProductReviews(productSlug),
+    queryFn: () => getProductReviews(productSlug),
   });
 
-  const reviews    = data?.reviews   ?? [];
-  const avgRating  = data?.avgRating ?? 0;
-  const totalCount = data?.count     ?? 0;
+  const reviews = data?.reviews ?? [];
+  const avgRating = data?.avgRating ?? 0;
+  const totalCount = data?.count ?? 0;
 
   // Called when customer clicks "Write a Review"
   const handleWriteReviewClick = async () => {
     // Guest — not logged in
     if (!user) {
-      toast.error("Only customers who have purchased and received this item can leave a review. Please sign in.");
+      toast.error(
+        "Only customers who have purchased and received this item can leave a review. Please sign in.",
+      );
       return;
     }
 
@@ -427,7 +501,9 @@ function ReviewsTab({ productSlug, productId }: { productSlug: string; productId
           toast.error("Only customers who have purchased this item can leave a review.");
           break;
         case "not_delivered":
-          toast.error("You haven't received this item yet. Reviews can only be submitted after your order has been delivered.");
+          toast.error(
+            "You haven't received this item yet. Reviews can only be submitted after your order has been delivered.",
+          );
           break;
         case "already_reviewed":
           toast.info("You have already submitted a review for this product.");
@@ -445,18 +521,34 @@ function ReviewsTab({ productSlug, productId }: { productSlug: string; productId
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!rating) { toast.error("Please select a star rating"); return; }
-    if (!user)   { toast.error("Please sign in to leave a review"); return; }
+    if (!rating) {
+      toast.error("Please select a star rating");
+      return;
+    }
+    if (!user) {
+      toast.error("Please sign in to leave a review");
+      return;
+    }
     setSubmitting(true);
     try {
-      await submitReview({ productId, rating, reviewText: reviewText.trim() || undefined, disclosedIncentive: disclosed });
+      await submitReview({
+        productId,
+        rating,
+        reviewText: reviewText.trim() || undefined,
+        disclosedIncentive: disclosed,
+      });
       toast.success("Review submitted — it will appear after moderation.");
-      setShowForm(false); setRating(0); setReviewText(""); setDisclosed(false); setEligibility(null);
+      setShowForm(false);
+      setRating(0);
+      setReviewText("");
+      setDisclosed(false);
+      setEligibility(null);
       refetch();
     } catch (err: any) {
-      const msg = typeof err.message === "string" && err.message.includes("{")
-        ? "Please check your review and try again."
-        : err.message ?? "Failed to submit review";
+      const msg =
+        typeof err.message === "string" && err.message.includes("{")
+          ? "Please check your review and try again."
+          : (err.message ?? "Failed to submit review");
       toast.error(msg);
     } finally {
       setSubmitting(false);
@@ -471,7 +563,9 @@ function ReviewsTab({ productSlug, productId }: { productSlug: string; productId
           <div className="text-center">
             <p className="text-3xl sm:text-4xl font-bold">{avgRating.toFixed(1)}</p>
             <StarRow rating={Math.round(avgRating)} />
-            <p className="text-[10px] sm:text-xs text-text-secondary mt-1">{totalCount} review{totalCount !== 1 ? "s" : ""}</p>
+            <p className="text-[10px] sm:text-xs text-text-secondary mt-1">
+              {totalCount} review{totalCount !== 1 ? "s" : ""}
+            </p>
           </div>
         </div>
       )}
@@ -489,14 +583,27 @@ function ReviewsTab({ productSlug, productId }: { productSlug: string; productId
 
       {/* Review form — only shown after eligibility confirmed */}
       {showForm && (
-        <form onSubmit={handleSubmit} className="card-surface p-4 sm:p-5 md:p-6 space-y-3 sm:space-y-4 rounded-xl">
+        <form
+          onSubmit={handleSubmit}
+          className="card-surface p-4 sm:p-5 md:p-6 space-y-3 sm:space-y-4 rounded-xl"
+        >
           <h3 className="font-semibold text-sm sm:text-base">Your Review</h3>
           <div>
             <p className="text-[10px] sm:text-xs text-text-secondary mb-2">Rating *</p>
             <div className="flex gap-1">
-              {[1,2,3,4,5].map((n) => (
-                <button key={n} type="button" onClick={() => setRating(n)} onMouseEnter={() => setHover(n)} onMouseLeave={() => setHover(0)} aria-label={`${n} star`} className="touch-manipulation">
-                  <Star className={`h-6 w-6 sm:h-7 sm:w-7 transition ${(hover||rating)>=n ? "fill-warning text-warning" : "text-border"}`} />
+              {[1, 2, 3, 4, 5].map((n) => (
+                <button
+                  key={n}
+                  type="button"
+                  onClick={() => setRating(n)}
+                  onMouseEnter={() => setHover(n)}
+                  onMouseLeave={() => setHover(0)}
+                  aria-label={`${n} star`}
+                  className="touch-manipulation"
+                >
+                  <Star
+                    className={`h-6 w-6 sm:h-7 sm:w-7 transition ${(hover || rating) >= n ? "fill-warning text-warning" : "text-border"}`}
+                  />
                 </button>
               ))}
             </div>
@@ -509,12 +616,29 @@ function ReviewsTab({ productSlug, productId }: { productSlug: string; productId
             className="w-full px-3 py-2.5 rounded-lg border border-border text-xs sm:text-sm focus:outline-none focus:border-primary"
           />
           <label className="flex items-center gap-2 text-[10px] sm:text-xs text-text-secondary cursor-pointer">
-            <input type="checkbox" checked={disclosed} onChange={(e) => setDisclosed(e.target.checked)} className="rounded" />
+            <input
+              type="checkbox"
+              checked={disclosed}
+              onChange={(e) => setDisclosed(e.target.checked)}
+              className="rounded"
+            />
             I received this product free or at a discount in exchange for a review (FTC disclosure)
           </label>
           <div className="flex gap-2">
-            <button type="button" onClick={() => { setShowForm(false); setEligibility(null); }} className="btn-outline-primary text-xs sm:text-sm px-3 sm:px-4 py-2 min-h-[44px]">Cancel</button>
-            <button disabled={submitting} className="btn-primary text-xs sm:text-sm px-3 sm:px-4 py-2 disabled:opacity-60 min-h-[44px]">
+            <button
+              type="button"
+              onClick={() => {
+                setShowForm(false);
+                setEligibility(null);
+              }}
+              className="btn-outline-primary text-xs sm:text-sm px-3 sm:px-4 py-2 min-h-[44px]"
+            >
+              Cancel
+            </button>
+            <button
+              disabled={submitting}
+              className="btn-primary text-xs sm:text-sm px-3 sm:px-4 py-2 disabled:opacity-60 min-h-[44px]"
+            >
               {submitting ? "Submitting…" : "Submit Review"}
             </button>
           </div>
@@ -523,7 +647,9 @@ function ReviewsTab({ productSlug, productId }: { productSlug: string; productId
 
       {/* Reviews list */}
       {isLoading ? (
-        <div className="flex justify-center py-8"><div className="h-6 w-6 rounded-full border-4 border-primary border-t-transparent animate-spin" /></div>
+        <div className="flex justify-center py-8">
+          <div className="h-6 w-6 rounded-full border-4 border-primary border-t-transparent animate-spin" />
+        </div>
       ) : reviews.length === 0 ? (
         <p className="text-xs sm:text-sm text-text-secondary">No reviews yet. Be the first!</p>
       ) : (
@@ -536,15 +662,36 @@ function ReviewsTab({ productSlug, productId }: { productSlug: string; productId
                   <div className="flex items-center gap-2 mt-0.5">
                     <StarRow rating={r.rating} size={3} />
                     {r.isVerifiedPurchase && (
-                      <span className="inline-flex items-center gap-1 text-[10px] sm:text-xs text-success"><CheckCircle2 className="h-3 w-3" />Verified</span>
+                      <span className="inline-flex items-center gap-1 text-[10px] sm:text-xs text-success">
+                        <CheckCircle2 className="h-3 w-3" />
+                        Verified
+                      </span>
                     )}
                   </div>
                 </div>
-                <p className="text-[10px] sm:text-xs text-text-secondary shrink-0">{new Date(r.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}</p>
+                <p className="text-[10px] sm:text-xs text-text-secondary shrink-0">
+                  {new Date(r.createdAt).toLocaleDateString("en-US", {
+                    month: "short",
+                    day: "numeric",
+                    year: "numeric",
+                  })}
+                </p>
               </div>
-              {r.reviewText && <p className="mt-2 text-xs sm:text-sm text-text-secondary leading-relaxed">{r.reviewText}</p>}
-              {r.disclosedIncentive && <p className="mt-1 text-[10px] sm:text-xs text-text-secondary italic">* Reviewer disclosed they received an incentive.</p>}
-              {r.insiderRelationship && <p className="mt-1 text-[10px] sm:text-xs text-text-secondary italic">* Relationship: {r.insiderRelationship}</p>}
+              {r.reviewText && (
+                <p className="mt-2 text-xs sm:text-sm text-text-secondary leading-relaxed">
+                  {r.reviewText}
+                </p>
+              )}
+              {r.disclosedIncentive && (
+                <p className="mt-1 text-[10px] sm:text-xs text-text-secondary italic">
+                  * Reviewer disclosed they received an incentive.
+                </p>
+              )}
+              {r.insiderRelationship && (
+                <p className="mt-1 text-[10px] sm:text-xs text-text-secondary italic">
+                  * Relationship: {r.insiderRelationship}
+                </p>
+              )}
             </li>
           ))}
         </ul>

@@ -1,7 +1,17 @@
 import type { ReactNode } from "react";
 import { PageHero } from "@/components/ui/PageHero";
 
-export function PolicyLayout({ title, updated = "June 2025", crumb, children }: { title: string; updated?: string; crumb: string; children: ReactNode }) {
+export function PolicyLayout({
+  title,
+  updated = "June 2025",
+  crumb,
+  children,
+}: {
+  title: string;
+  updated?: string;
+  crumb: string;
+  children: ReactNode;
+}) {
   return (
     <div>
       <PageHero title={title} />

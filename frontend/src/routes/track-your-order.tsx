@@ -1,8 +1,19 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useState } from "react";
 import {
-  CheckCircle2, Circle, Package, Truck, MapPin,
-  Clock, ShieldCheck, Headphones, RotateCcw, Mail, Phone, ArrowRight, AlertCircle,
+  CheckCircle2,
+  Circle,
+  Package,
+  Truck,
+  MapPin,
+  Clock,
+  ShieldCheck,
+  Headphones,
+  RotateCcw,
+  Mail,
+  Phone,
+  ArrowRight,
+  AlertCircle,
 } from "lucide-react";
 import { PageHero } from "@/components/ui/PageHero";
 import { trackOrder, type TrackOrderResult } from "@/lib/api-client";
@@ -38,7 +49,8 @@ function TrackOrderPage() {
     const o = order.trim();
     const em = email.trim();
     if (!ORDER_RE.test(o)) next.order = "Enter a valid order number (letters, numbers and dashes).";
-    if (!EMAIL_RE.test(em) || em.length > 254) next.email = "Enter the email address used at checkout.";
+    if (!EMAIL_RE.test(em) || em.length > 254)
+      next.email = "Enter the email address used at checkout.";
     setErrors(next);
     if (Object.keys(next).length > 0) return;
 
@@ -84,7 +96,9 @@ function TrackOrderPage() {
               required
             />
             {errors.order && (
-              <p id="order-error" className="text-xs text-destructive mt-1">{errors.order}</p>
+              <p id="order-error" className="text-xs text-destructive mt-1">
+                {errors.order}
+              </p>
             )}
           </div>
 
@@ -109,12 +123,24 @@ function TrackOrderPage() {
               required
             />
             {errors.email && (
-              <p id="email-error" className="text-xs text-destructive mt-1">{errors.email}</p>
+              <p id="email-error" className="text-xs text-destructive mt-1">
+                {errors.email}
+              </p>
             )}
           </div>
 
-          <button type="submit" disabled={loading} className="btn-primary w-full disabled:opacity-60">
-            {loading ? "Looking up…" : <>Track Order <ArrowRight className="inline h-4 w-4 ml-1" /></>}
+          <button
+            type="submit"
+            disabled={loading}
+            className="btn-primary w-full disabled:opacity-60"
+          >
+            {loading ? (
+              "Looking up…"
+            ) : (
+              <>
+                Track Order <ArrowRight className="inline h-4 w-4 ml-1" />
+              </>
+            )}
           </button>
           <p className="text-xs text-text-secondary text-center">
             We only use these details to look up your order. They are not stored on this device.
@@ -134,11 +160,11 @@ function OrderStatusPanel({ result }: { result: TrackOrderResult }) {
   const isCancelled = order.status === "cancelled" || order.status === "refunded";
 
   const steps = [
-    { label: "Order Placed", icon: CheckCircle2, key: "pending"    },
-    { label: "Confirmed",    icon: CheckCircle2, key: "confirmed"  },
-    { label: "Processing",   icon: Package,      key: "processing" },
-    { label: "Shipped",      icon: Truck,        key: "shipped"    },
-    { label: "Delivered",    icon: MapPin,       key: "delivered"  },
+    { label: "Order Placed", icon: CheckCircle2, key: "pending" },
+    { label: "Confirmed", icon: CheckCircle2, key: "confirmed" },
+    { label: "Processing", icon: Package, key: "processing" },
+    { label: "Shipped", icon: Truck, key: "shipped" },
+    { label: "Delivered", icon: MapPin, key: "delivered" },
   ];
 
   return (
@@ -152,11 +178,20 @@ function OrderStatusPanel({ result }: { result: TrackOrderResult }) {
           <p className="text-xs uppercase tracking-widest opacity-80">Order</p>
           <h2 className="font-display text-2xl font-bold font-mono">#{order.orderNumber}</h2>
           <p className="text-xs opacity-70 mt-0.5">
-            Placed {new Date(order.createdAt).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })}
+            Placed{" "}
+            {new Date(order.createdAt).toLocaleDateString("en-US", {
+              month: "long",
+              day: "numeric",
+              year: "numeric",
+            })}
           </p>
         </div>
         <span className="inline-flex items-center gap-2 rounded-full bg-white/20 px-3 py-1 text-xs font-semibold uppercase tracking-wide capitalize">
-          {isCancelled ? <AlertCircle className="h-3.5 w-3.5" /> : <Truck className="h-3.5 w-3.5" />}
+          {isCancelled ? (
+            <AlertCircle className="h-3.5 w-3.5" />
+          ) : (
+            <Truck className="h-3.5 w-3.5" />
+          )}
           {order.status.replace("_", " ")}
         </span>
       </header>
@@ -179,7 +214,9 @@ function OrderStatusPanel({ result }: { result: TrackOrderResult }) {
                   >
                     <Icon className="h-4 w-4" />
                   </div>
-                  <p className={`mt-1.5 text-xs font-semibold leading-tight ${done ? "" : "text-text-secondary"}`}>
+                  <p
+                    className={`mt-1.5 text-xs font-semibold leading-tight ${done ? "" : "text-text-secondary"}`}
+                  >
                     {s.label}
                   </p>
                 </li>
@@ -190,12 +227,18 @@ function OrderStatusPanel({ result }: { result: TrackOrderResult }) {
 
         {/* Items */}
         <div>
-          <p className="text-xs uppercase tracking-widest text-text-secondary mb-3">Items Ordered</p>
+          <p className="text-xs uppercase tracking-widest text-text-secondary mb-3">
+            Items Ordered
+          </p>
           <div className="space-y-3">
             {items.map((it, i) => (
               <div key={i} className="flex gap-3 items-center">
                 {it.product_image && (
-                  <img src={it.product_image} alt="" className="h-12 w-12 rounded-lg object-cover border border-border" />
+                  <img
+                    src={it.product_image}
+                    alt=""
+                    className="h-12 w-12 rounded-lg object-cover border border-border"
+                  />
                 )}
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-medium truncate">{it.product_name}</p>
@@ -238,16 +281,23 @@ function OrderStatusPanel({ result }: { result: TrackOrderResult }) {
         {/* Shipping address + history */}
         <div className="grid md:grid-cols-2 gap-4">
           <div className="rounded-xl border border-border bg-muted/30 p-4">
-            <p className="text-xs uppercase tracking-widest text-text-secondary mb-1.5">Shipping To</p>
-            <p className="text-sm">{order.shippingAddress.firstName} {order.shippingAddress.lastName}</p>
+            <p className="text-xs uppercase tracking-widest text-text-secondary mb-1.5">
+              Shipping To
+            </p>
+            <p className="text-sm">
+              {order.shippingAddress.firstName} {order.shippingAddress.lastName}
+            </p>
             <p className="text-sm text-text-secondary">{order.shippingAddress.address}</p>
             <p className="text-sm text-text-secondary">
-              {order.shippingAddress.city}, {order.shippingAddress.state} {order.shippingAddress.zip}
+              {order.shippingAddress.city}, {order.shippingAddress.state}{" "}
+              {order.shippingAddress.zip}
             </p>
           </div>
           {history.length > 0 && (
             <div className="rounded-xl border border-border bg-muted/30 p-4">
-              <p className="text-xs uppercase tracking-widest text-text-secondary mb-1.5">Status History</p>
+              <p className="text-xs uppercase tracking-widest text-text-secondary mb-1.5">
+                Status History
+              </p>
               <ul className="space-y-1.5">
                 {history.slice(-4).map((h, i) => (
                   <li key={i} className="flex items-start gap-2 text-xs">
@@ -256,7 +306,11 @@ function OrderStatusPanel({ result }: { result: TrackOrderResult }) {
                       <span className="font-semibold capitalize">{h.status}</span>
                       {h.notes && <span className="text-text-secondary"> — {h.notes}</span>}
                       <span className="text-text-secondary block">
-                        {new Date(h.created_at).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
+                        {new Date(h.created_at).toLocaleDateString("en-US", {
+                          month: "short",
+                          day: "numeric",
+                          year: "numeric",
+                        })}
                       </span>
                     </span>
                   </li>
@@ -281,16 +335,33 @@ function TrackingCompanion() {
           <h2 className="font-display text-3xl md:text-4xl font-bold mt-2">
             From our workshop to your doorstep.
           </h2>
-          <p className="text-text-secondary mt-3">Every order ships from Palmer, Alaska with care.</p>
+          <p className="text-text-secondary mt-3">
+            Every order ships from Palmer, Alaska with care.
+          </p>
         </div>
 
         <div className="grid gap-4 md:grid-cols-3 mt-10">
           {[
-            { icon: Truck,       title: "Free U.S. Shipping",  body: "Complimentary ground shipping on every order over $350." },
-            { icon: RotateCcw,   title: "40-Day Returns",       body: "Not the right fit? Send it back within 40 days for a full refund." },
-            { icon: ShieldCheck, title: "12-Month Warranty",    body: "Every tool is covered against manufacturer defects for a full year." },
+            {
+              icon: Truck,
+              title: "Free U.S. Shipping",
+              body: "Complimentary ground shipping on every order over $350.",
+            },
+            {
+              icon: RotateCcw,
+              title: "40-Day Returns",
+              body: "Not the right fit? Send it back within 40 days for a full refund.",
+            },
+            {
+              icon: ShieldCheck,
+              title: "12-Month Warranty",
+              body: "Every tool is covered against manufacturer defects for a full year.",
+            },
           ].map(({ icon: Icon, title, body }) => (
-            <article key={title} className="rounded-3xl border border-border bg-surface p-6 shadow-sm">
+            <article
+              key={title}
+              className="rounded-3xl border border-border bg-surface p-6 shadow-sm"
+            >
               <div className="h-11 w-11 rounded-2xl bg-primary/10 text-primary grid place-items-center">
                 <Icon className="h-5 w-5" />
               </div>
@@ -329,10 +400,10 @@ function TrackingCompanion() {
             <h3 className="font-display text-2xl font-bold">Helpful next steps</h3>
             <ul className="mt-4 space-y-3 text-sm">
               {[
-                { to: "/shipping-policy",           label: "Read the full shipping policy" },
-                { to: "/returns-refund-policy",      label: "Start a return or exchange" },
-                { to: "/order-cancellation-policy",  label: "Cancel or change your order" },
-                { to: "/contact-us",                 label: "Contact the CutHaven team" },
+                { to: "/shipping-policy", label: "Read the full shipping policy" },
+                { to: "/returns-refund-policy", label: "Start a return or exchange" },
+                { to: "/order-cancellation-policy", label: "Cancel or change your order" },
+                { to: "/contact-us", label: "Contact the CutHaven team" },
               ].map((l) => (
                 <li key={l.to}>
                   <Link

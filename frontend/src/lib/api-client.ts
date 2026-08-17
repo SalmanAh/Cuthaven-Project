@@ -34,9 +34,7 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
   if (!res.ok) {
     const data = await res.json().catch(() => ({}));
     throw new Error(
-      typeof data.error === "string"
-        ? data.error
-        : `Request to ${path} failed with ${res.status}`,
+      typeof data.error === "string" ? data.error : `Request to ${path} failed with ${res.status}`,
     );
   }
 
@@ -150,7 +148,8 @@ export interface ApiOrderItem {
 export interface ApiOrder {
   id: string;
   orderNumber: string;
-  status: "pending" | "confirmed" | "processing" | "shipped" | "delivered" | "cancelled" | "refunded";
+  status:
+    "pending" | "confirmed" | "processing" | "shipped" | "delivered" | "cancelled" | "refunded";
   paymentStatus: "pending" | "paid" | "failed" | "refunded" | "partially_refunded";
   subtotal: number;
   shippingCost: number;
@@ -167,7 +166,9 @@ export interface ApiOrder {
 // ─── Authenticated customer endpoints ──────────────────────────────────────
 
 export async function getMyProfile(): Promise<CustomerProfile> {
-  const { customer } = await request<{ customer: CustomerProfile }>("/customers/me", { auth: true });
+  const { customer } = await request<{ customer: CustomerProfile }>("/customers/me", {
+    auth: true,
+  });
   return customer;
 }
 
@@ -189,10 +190,9 @@ export async function changeMyPassword(
 }
 
 export async function getMyAddresses(): Promise<CustomerAddress[]> {
-  const { addresses } = await request<{ addresses: CustomerAddress[] }>(
-    "/customers/me/addresses",
-    { auth: true },
-  );
+  const { addresses } = await request<{ addresses: CustomerAddress[] }>("/customers/me/addresses", {
+    auth: true,
+  });
   return addresses;
 }
 
@@ -386,7 +386,8 @@ export interface AdminOrderItem {
 export interface AdminOrder {
   id: string;
   orderNumber: string;
-  status: "pending" | "confirmed" | "processing" | "shipped" | "delivered" | "cancelled" | "refunded";
+  status:
+    "pending" | "confirmed" | "processing" | "shipped" | "delivered" | "cancelled" | "refunded";
   paymentStatus: "pending" | "paid" | "failed" | "refunded" | "partially_refunded";
   subtotal: number;
   shippingCost: number;
@@ -626,10 +627,25 @@ export interface TrackOrderResult {
     total: number;
     createdAt: string;
     updatedAt: string;
-    shippingAddress: { firstName: string; lastName: string; address: string; city: string; state: string; zip: string; country: string; };
+    shippingAddress: {
+      firstName: string;
+      lastName: string;
+      address: string;
+      city: string;
+      state: string;
+      zip: string;
+      country: string;
+    };
   };
-  items: Array<{ product_name: string; product_slug: string; product_image: string | null; quantity: number; unit_price: number; total_price: number; }>;
-  history: Array<{ status: string; notes: string | null; created_at: string; }>;
+  items: Array<{
+    product_name: string;
+    product_slug: string;
+    product_image: string | null;
+    quantity: number;
+    unit_price: number;
+    total_price: number;
+  }>;
+  history: Array<{ status: string; notes: string | null; created_at: string }>;
 }
 
 export async function trackOrder(orderNumber: string, email: string): Promise<TrackOrderResult> {
@@ -640,7 +656,11 @@ export async function trackOrder(orderNumber: string, email: string): Promise<Tr
 // ─── Contact form ──────────────────────────────────────────────────────────
 
 export async function submitContact(data: {
-  name: string; email: string; phone?: string; subject?: string; message: string;
+  name: string;
+  email: string;
+  phone?: string;
+  subject?: string;
+  message: string;
 }): Promise<{ message: string }> {
   return request("/contact", { method: "POST", body: data });
 }
@@ -705,13 +725,15 @@ export async function getBlogPosts(params?: {
 }): Promise<{ posts: BlogPost[]; total: number; page: number; limit: number }> {
   const q = new URLSearchParams();
   if (params?.category) q.set("category", params.category);
-  if (params?.page)     q.set("page", String(params.page));
-  if (params?.limit)    q.set("limit", String(params.limit));
+  if (params?.page) q.set("page", String(params.page));
+  if (params?.limit) q.set("limit", String(params.limit));
   const qs = q.toString() ? `?${q.toString()}` : "";
   return request(`/blog${qs}`);
 }
 
-export async function getBlogCategories(): Promise<{ categories: { name: string; count: number }[] }> {
+export async function getBlogCategories(): Promise<{
+  categories: { name: string; count: number }[];
+}> {
   return request("/blog/categories");
 }
 
@@ -728,7 +750,10 @@ export async function adminCreateBlogPost(data: Partial<BlogPost>): Promise<{ po
   return request("/admin/blog", { method: "POST", body: data, auth: true });
 }
 
-export async function adminUpdateBlogPost(id: string, data: Partial<BlogPost>): Promise<{ post: BlogPost }> {
+export async function adminUpdateBlogPost(
+  id: string,
+  data: Partial<BlogPost>,
+): Promise<{ post: BlogPost }> {
   return request(`/admin/blog/${id}`, { method: "PUT", body: data, auth: true });
 }
 
@@ -739,7 +764,8 @@ export async function adminDeleteBlogPost(id: string): Promise<void> {
 // ─── Consent log ──────────────────────────────────────────────────────────
 
 export async function logConsent(data: {
-  consentAction: "accept_all" | "reject_all" | "custom" | "opt_out_sale_share" | "limit_sensitive_pi";
+  consentAction:
+    "accept_all" | "reject_all" | "custom" | "opt_out_sale_share" | "limit_sensitive_pi";
   analytics?: boolean;
   marketing?: boolean;
   gpcSignalDetected?: boolean;
@@ -770,8 +796,13 @@ export interface PayPalOrderResponse {
     shippingAddress: Record<string, string>;
     customerNotes: string | null;
     lineItems: Array<{
-      productId: string; productName: string; productSlug: string;
-      productImage: string | null; quantity: number; unitPrice: number; totalPrice: number;
+      productId: string;
+      productName: string;
+      productSlug: string;
+      productImage: string | null;
+      quantity: number;
+      unitPrice: number;
+      totalPrice: number;
     }>;
   };
 }
@@ -844,11 +875,7 @@ export async function createCodOrder(
 // ─── Review eligibility check ──────────────────────────────────────────────
 
 export type CanReviewReason =
-  | "not_logged_in"
-  | "not_purchased"
-  | "not_delivered"
-  | "already_reviewed"
-  | "ok";
+  "not_logged_in" | "not_purchased" | "not_delivered" | "already_reviewed" | "ok";
 
 export interface CanReviewResult {
   canReview: boolean;
@@ -882,16 +909,16 @@ export interface PaymentGateway {
   gatewayType: GatewayType;
   accountName: string;
   isActive: boolean;
-  
+
   // Masked keys for security
   stripeSecretKey?: string;
   stripePublishableKey?: string;
   stripeWebhookSecret?: string;
-  
+
   paypalClientId?: string;
   paypalClientSecret?: string;
   paypalMode?: PayPalMode;
-  
+
   createdAt: string;
   updatedAt: string;
 }
@@ -901,16 +928,16 @@ export interface PaymentGatewayFull {
   gatewayType: GatewayType;
   accountName: string;
   isActive: boolean;
-  
+
   // Full unmasked keys (for edit form)
   stripeSecretKey?: string;
   stripePublishableKey?: string;
   stripeWebhookSecret?: string;
-  
+
   paypalClientId?: string;
   paypalClientSecret?: string;
   paypalMode?: PayPalMode;
-  
+
   createdAt: string;
   updatedAt: string;
 }
@@ -943,7 +970,9 @@ export async function adminGetPaymentGateway(id: string): Promise<PaymentGateway
   return request<PaymentGatewayFull>(`/admin/payment-gateways/${id}`, { auth: true });
 }
 
-export async function adminCreatePaymentGateway(data: CreatePaymentGatewayRequest): Promise<PaymentGateway> {
+export async function adminCreatePaymentGateway(
+  data: CreatePaymentGatewayRequest,
+): Promise<PaymentGateway> {
   return request<PaymentGateway>("/admin/payment-gateways", {
     method: "POST",
     body: data,
@@ -951,7 +980,10 @@ export async function adminCreatePaymentGateway(data: CreatePaymentGatewayReques
   });
 }
 
-export async function adminUpdatePaymentGateway(id: string, data: Partial<CreatePaymentGatewayRequest>): Promise<PaymentGateway> {
+export async function adminUpdatePaymentGateway(
+  id: string,
+  data: Partial<CreatePaymentGatewayRequest>,
+): Promise<PaymentGateway> {
   return request<PaymentGateway>(`/admin/payment-gateways/${id}`, {
     method: "PUT",
     body: data,
@@ -966,7 +998,9 @@ export async function adminActivatePaymentGateway(id: string): Promise<PaymentGa
   });
 }
 
-export async function adminDeletePaymentGateway(id: string): Promise<{ success: boolean; message: string }> {
+export async function adminDeletePaymentGateway(
+  id: string,
+): Promise<{ success: boolean; message: string }> {
   return request<{ success: boolean; message: string }>(`/admin/payment-gateways/${id}`, {
     method: "DELETE",
     auth: true,

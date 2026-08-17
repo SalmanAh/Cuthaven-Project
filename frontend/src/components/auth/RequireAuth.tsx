@@ -32,13 +32,7 @@ export function RequireAuth({ children, roles }: Props) {
 
   // Not logged in — send to login with a redirect param so they come back after
   if (!user) {
-    return (
-      <Navigate
-        to="/account/login"
-        search={{ redirect: location.pathname }}
-        replace
-      />
-    );
+    return <Navigate to="/account/login" search={{ redirect: location.pathname }} replace />;
   }
 
   // Logged in but wrong role — send to home, not to login
