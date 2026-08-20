@@ -60,7 +60,7 @@ export default defineConfig({
     // Optimize dependencies
     optimizeDeps: {
       include: ["react", "react-dom", "@tanstack/react-router", "@tanstack/react-query"],
-      exclude: ["@stripe/react-stripe-js", "@paypal/react-paypal-js"],
+      // Don't exclude Stripe - it needs to be bundled properly
     },
     // Enable CSS optimization
     css: {
