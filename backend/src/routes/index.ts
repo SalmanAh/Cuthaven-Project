@@ -13,6 +13,7 @@ import { blogRouter } from "./blog.routes.js";
 import { consentRouter } from "./consent.routes.js";
 import { uploadRouter } from "./upload.routes.js";
 import paymentGatewaysRouter from "./payment-gateways.routes.js";
+import { queriesRouter } from "./queries.routes.js";
 
 export const apiRouter = Router();
 
@@ -30,3 +31,4 @@ apiRouter.use("/blog", blogRouter);
 apiRouter.use("/consent", consentRouter);
 apiRouter.use("/upload", uploadRouter);
 apiRouter.use("/admin/payment-gateways", paymentGatewaysRouter);
+apiRouter.use("/queries", queriesRouter);

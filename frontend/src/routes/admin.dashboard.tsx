@@ -21,6 +21,7 @@ import {
   XCircle,
   BookOpen,
   CreditCard,
+  MessageCircle,
 } from "lucide-react";
 import {
   AreaChart,
@@ -114,6 +115,8 @@ import {
   type GatewayType,
   type PayPalMode,
 } from "@/lib/api-client";
+import { QueriesList } from "@/components/admin/queries/QueriesList";
+import { ConversationDetail } from "@/components/admin/queries/ConversationDetail";
 
 // ─── Admin reviews API (not yet in api-client — called directly) ───────────
 const API_URL = import.meta.env.VITE_API_URL ?? "http://localhost:4000/api";
@@ -158,6 +161,7 @@ type Tab =
   | "gateways"
   | "reviews"
   | "blog"
+  | "queries"
   | "settings";
 
 export const Route = createFileRoute("/admin/dashboard")({
@@ -191,14 +195,15 @@ function AdminDashboard() {
     { key: "gateways", label: "Payment Gateways", icon: CreditCard },
     { key: "reviews", label: "Reviews", icon: Star },
     { key: "blog", label: "Blog", icon: BookOpen },
+    { key: "queries", label: "Customer Queries", icon: MessageCircle },
     { key: "settings", label: "Settings", icon: Settings },
     { key: "logout", label: "Logout", icon: LogOut, onClick: handleLogout },
   ];
 
-  // Filter sidebar based on role — product_manager only sees: overview, orders, products
+  // Filter sidebar based on role — product_manager only sees: overview, orders, products, queries
   const items =
     user?.role === "product_manager"
-      ? allItems.filter((i) => ["overview", "orders", "products", "logout"].includes(i.key))
+      ? allItems.filter((i) => ["overview", "orders", "products", "queries", "logout"].includes(i.key))
       : allItems;
 
   const titles: Record<Tab, string> = {
@@ -212,6 +217,7 @@ function AdminDashboard() {
     gateways: "Payment Gateways",
     reviews: "Reviews",
     blog: "Blog",
+    queries: "Customer Queries",
     settings: "Settings",
   };
 
@@ -236,6 +242,7 @@ function AdminDashboard() {
         {tab === "gateways" && <GatewaysPage />}
         {tab === "reviews" && <ReviewsPage />}
         {tab === "blog" && <BlogPage />}
+        {tab === "queries" && <QueriesPage />}
         {tab === "settings" && <SettingsPage />}
       </DashboardShell>
     </RequireAuth>
@@ -2752,6 +2759,19 @@ function CouponDialog({
       </DialogContent>
     </Dialog>
   );
+}
+
+// ─── Customer Queries (Phase 5 + 6) ────────────────────────────────────────
+function QueriesPage() {
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+
+  // Phase 6: Show conversation detail when selected
+  if (selectedId) {
+    return <ConversationDetail conversationId={selectedId} onBack={() => setSelectedId(null)} />;
+  }
+
+  // Phase 5: Show list view
+  return <QueriesList onSelectConversation={setSelectedId} />;
 }
 
 // ─── Settings (local UI only — no DB-backed settings table yet) ────────────

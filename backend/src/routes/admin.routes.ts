@@ -8,6 +8,7 @@ import { getAdminAnalytics, getAdminRevenueSeries } from "../controllers/admin.a
 import { listCoupons, createCoupon, updateCoupon, deleteCoupon } from "../controllers/admin.coupons.controller.js";
 import { listAdminReviews, moderateReview } from "../controllers/reviews.controller.js";
 import { adminListPosts, adminCreatePost, adminUpdatePost, adminDeletePost } from "../controllers/blog.controller.js";
+import * as adminQueriesController from "../controllers/admin.queries.controller.js";
 
 export const adminRouter = Router();
 
@@ -98,3 +99,30 @@ adminRouter.get(    "/blog",     requireRole("admin", "store_manager"), adminLis
 adminRouter.post(   "/blog",     requireRole("admin"), adminCreatePost);
 adminRouter.put(    "/blog/:id", requireRole("admin"), adminUpdatePost);
 adminRouter.delete( "/blog/:id", requireRole("admin"), adminDeletePost);
+
+// ── Customer Queries (admin + store_manager + product_manager) ────────────
+adminRouter.get(
+  "/queries/conversations",
+  requireRole("admin", "store_manager", "product_manager"),
+  adminQueriesController.getConversations
+);
+adminRouter.get(
+  "/queries/conversations/:id",
+  requireRole("admin", "store_manager", "product_manager"),
+  adminQueriesController.getConversationDetail
+);
+adminRouter.post(
+  "/queries/conversations/:id/messages",
+  requireRole("admin", "store_manager", "product_manager"),
+  adminQueriesController.sendAdminMessage
+);
+adminRouter.patch(
+  "/queries/conversations/:id/read",
+  requireRole("admin", "store_manager", "product_manager"),
+  adminQueriesController.markAsReadByAdmin
+);
+adminRouter.get(
+  "/queries/unread-count",
+  requireRole("admin", "store_manager", "product_manager"),
+  adminQueriesController.getAdminUnreadCount
+);

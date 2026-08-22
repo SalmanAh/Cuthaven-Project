@@ -20,6 +20,7 @@ import { UIProvider, useUI } from "@/context/UIContext";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { CartDrawer } from "@/components/cart/CartDrawer";
 import { CookieConsent } from "@/components/layout/CookieConsent";
+import { CustomerChatButton } from "@/components/queries/CustomerChatButton";
 
 function NotFoundComponent() {
   return (
@@ -153,6 +154,7 @@ function RootComponent() {
                 </AppLayout>
                 <CartDrawer />
                 <CookieRoot />
+                <CustomerChatButton />
                 <Toaster position="top-right" richColors />
               </CartUIProvider>
             </CartProvider>
