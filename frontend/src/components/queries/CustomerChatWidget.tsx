@@ -148,7 +148,7 @@ export default function CustomerChatWidget({
   const subscribeToMessages = (conversationId: string): (() => void) => {
     let channel: RealtimeChannel | null = null;
     let pollingInterval: NodeJS.Timeout | null = null;
-    let lastMessageId: string | null = null;
+    let lastFetchTime: number = Date.now();
     let usePolling = false;
 
     // Polling fallback function
@@ -160,12 +160,13 @@ export default function CustomerChatWidget({
           const msgs = await getConversationMessages(conversationId);
           
           // Find new messages since last check
-          const newMessages = msgs.filter(m => {
-            if (!lastMessageId) return false;
-            return m.created_at > (messages.find(msg => msg.id === lastMessageId)?.created_at || '');
-          });
+          const newMessages = msgs.filter(m => 
+            new Date(m.created_at).getTime() > lastFetchTime
+          );
 
           if (newMessages.length > 0) {
+            lastFetchTime = Date.now();
+            
             setMessages((prev) => {
               const combined = [...prev];
               newMessages.forEach(newMsg => {
@@ -256,14 +257,6 @@ export default function CustomerChatWidget({
       }
       stopPolling();
     };
-
-    // Track last message ID for polling
-    setMessages((prev) => {
-      if (prev.length > 0) {
-        lastMessageId = prev[prev.length - 1].id;
-      }
-      return prev;
-    });
 
     // Initial subscription attempt
     subscribe();
