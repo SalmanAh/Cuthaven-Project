@@ -241,14 +241,6 @@ export function ConversationDetail({
               </p>
             )}
           </div>
-          
-          {/* Real-time indicator */}
-          {channel && (
-            <div className="flex items-center gap-2 text-xs text-success">
-              <span className="h-2 w-2 rounded-full bg-success animate-pulse" />
-              <span className="hidden sm:inline">Live</span>
-            </div>
-          )}
         </div>
       </DashCard>
 
