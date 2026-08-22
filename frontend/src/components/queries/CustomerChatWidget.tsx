@@ -1,7 +1,5 @@
 import { useState, useEffect, useRef, FormEvent } from "react";
 import { Send, X } from "lucide-react";
-import { supabase, isRealtimeConfigured } from "@/lib/supabase";
-import type { RealtimeChannel } from "@supabase/supabase-js";
 import {
   getOrCreateConversation,
   getConversationMessages,
@@ -33,7 +31,8 @@ export default function CustomerChatWidget({
   const [error, setError] = useState<string | null>(null);
   
   const messagesEndRef = useRef<HTMLDivElement>(null);
-  const channelRef = useRef<RealtimeChannel | null>(null);
+  const pollingIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const lastFetchTimeRef = useRef<number>(Date.now());
 
   // Scroll to bottom when messages change
   const scrollToBottom = () => {
@@ -69,10 +68,9 @@ export default function CustomerChatWidget({
     return null;
   };
 
-  // Initialize conversation and WebSocket
+  // Initialize conversation and start polling
   useEffect(() => {
-    let cleanup: (() => void) | null = null;
-    let mounted = true; // Prevent double initialization
+    let mounted = true;
 
     const initChat = async () => {
       if (!mounted) return;
@@ -83,14 +81,12 @@ export default function CustomerChatWidget({
 
         const userIdentifier = getUserIdentifier();
 
-        // If no identifier and no guest info entered, show guest form
         if (!userIdentifier) {
           setIsGuestFormVisible(true);
           setIsLoading(false);
           return;
         }
 
-        // Get or create conversation
         let conv: Conversation;
         if (userIdentifier.type === "customer") {
           conv = await getOrCreateConversation({ customer_id: userIdentifier.id });
@@ -106,23 +102,19 @@ export default function CustomerChatWidget({
         setConversation(conv);
         onConversationReady(conv.id, conv.unread_by_customer);
 
-        // Fetch existing messages
         const msgs = await getConversationMessages(conv.id);
         
         if (!mounted) return;
         
         setMessages(msgs);
 
-        // Mark as read
         if (conv.unread_by_customer > 0) {
           await markConversationAsRead(conv.id);
           onUnreadCountChange(0);
         }
 
-        // Subscribe to new messages if Realtime is configured
-        if (isRealtimeConfigured() && mounted) {
-          cleanup = subscribeToMessages(conv.id);
-        }
+        // Start polling for new messages (5 second interval)
+        startPolling(conv.id);
 
         setIsLoading(false);
       } catch (err) {
@@ -136,153 +128,56 @@ export default function CustomerChatWidget({
 
     initChat();
 
-    // Cleanup on unmount
     return () => {
       mounted = false;
-      if (cleanup) cleanup();
-      unsubscribeFromMessages();
-    };
-  }, []); // Empty dependency array - only run once
-
-  // Subscribe to new messages (conversation-specific) with polling fallback
-  const subscribeToMessages = (conversationId: string): (() => void) => {
-    let channel: RealtimeChannel | null = null;
-    let pollingInterval: NodeJS.Timeout | null = null;
-    let lastFetchTime: number = Date.now();
-    let usePolling = false;
-
-    // Polling fallback function
-    const startPolling = () => {
-      usePolling = true;
-      
-      pollingInterval = setInterval(async () => {
-        try {
-          const msgs = await getConversationMessages(conversationId);
-          
-          // Find new messages since last check
-          const newMessages = msgs.filter(m => 
-            new Date(m.created_at).getTime() > lastFetchTime
-          );
-
-          if (newMessages.length > 0) {
-            lastFetchTime = Date.now();
-            
-            setMessages((prev) => {
-              const combined = [...prev];
-              newMessages.forEach(newMsg => {
-                if (!combined.some(m => m.id === newMsg.id)) {
-                  combined.push(newMsg);
-                }
-              });
-              return combined.sort((a, b) => 
-                new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
-              );
-            });
-
-            // Mark admin messages as read
-            if (newMessages.some(m => m.is_admin)) {
-              await markConversationAsRead(conversationId);
-              onUnreadCountChange(0);
-            }
-          }
-        } catch (err) {
-          // Silently handle polling errors
-        }
-      }, 5000);
-    };
-
-    const stopPolling = () => {
-      if (pollingInterval) {
-        clearInterval(pollingInterval);
-        pollingInterval = null;
-      }
-    };
-
-    const subscribe = () => {
-      // Guard against duplicate subscriptions
-      if (channel) {
-        return;
-      }
-
-      channel = supabase
-        .channel(`conversation_${conversationId}`)
-        .on(
-          "postgres_changes",
-          {
-            event: "INSERT",
-            schema: "public",
-            table: "conversation_messages",
-            filter: `conversation_id=eq.${conversationId}`,
-          },
-          (payload) => {
-            const newMsg = payload.new as Message;
-            setMessages((prev) => {
-              if (prev.some((m) => m.id === newMsg.id)) {
-                return prev;
-              }
-              return [...prev, newMsg];
-            });
-
-            if (newMsg.is_admin) {
-              markConversationAsRead(conversationId).catch(() => {});
-              onUnreadCountChange(0);
-            }
-          }
-        )
-        .subscribe((status) => {
-          // If WebSocket fails, switch to polling
-          if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
-            unsubscribe();
-            startPolling();
-          } else if (status === 'SUBSCRIBED') {
-            stopPolling();
-          }
-        });
-
-      channelRef.current = channel;
-
-      // Fallback: If not subscribed within 5 seconds, use polling
-      setTimeout(() => {
-        if (channel && !usePolling) {
-          startPolling();
-        }
-      }, 5000);
-    };
-
-    const unsubscribe = () => {
-      if (channel) {
-        supabase.removeChannel(channel);
-        channel = null;
-        channelRef.current = null;
-      }
       stopPolling();
     };
+  }, []);
 
-    // Initial subscription attempt
-    subscribe();
+  // Polling for new messages (backend API only)
+  const startPolling = (conversationId: string) => {
+    if (pollingIntervalRef.current) return; // Already polling
 
-    // Blur/focus management
-    const handleVisibilityChange = () => {
-      if (document.hidden) {
-        unsubscribe();
-      } else {
-        subscribe();
+    pollingIntervalRef.current = setInterval(async () => {
+      try {
+        const msgs = await getConversationMessages(conversationId);
+        
+        // Find messages newer than last fetch
+        const newMessages = msgs.filter(m => 
+          new Date(m.created_at).getTime() > lastFetchTimeRef.current
+        );
+
+        if (newMessages.length > 0) {
+          lastFetchTimeRef.current = Date.now();
+          
+          setMessages((prev) => {
+            const combined = [...prev];
+            newMessages.forEach(newMsg => {
+              if (!combined.some(m => m.id === newMsg.id)) {
+                combined.push(newMsg);
+              }
+            });
+            return combined.sort((a, b) => 
+              new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+            );
+          });
+
+          // Mark admin messages as read
+          if (newMessages.some(m => m.is_admin)) {
+            await markConversationAsRead(conversationId);
+            onUnreadCountChange(0);
+          }
+        }
+      } catch (err) {
+        // Silently handle polling errors
       }
-    };
-
-    document.addEventListener("visibilitychange", handleVisibilityChange);
-
-    // Return cleanup function
-    return () => {
-      unsubscribe();
-      document.removeEventListener("visibilitychange", handleVisibilityChange);
-    };
+    }, 5000); // Poll every 5 seconds
   };
 
-  const unsubscribeFromMessages = () => {
-    if (channelRef.current) {
-      supabase.removeChannel(channelRef.current);
-      channelRef.current = null;
+  const stopPolling = () => {
+    if (pollingIntervalRef.current) {
+      clearInterval(pollingIntervalRef.current);
+      pollingIntervalRef.current = null;
     }
   };
 
@@ -311,9 +206,8 @@ export default function CustomerChatWidget({
       const msgs = await getConversationMessages(conv.id);
       setMessages(msgs);
 
-      if (isRealtimeConfigured()) {
-        subscribeToMessages(conv.id);
-      }
+      // Start polling
+      startPolling(conv.id);
 
       setIsLoading(false);
     } catch (err) {

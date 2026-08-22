@@ -2,17 +2,15 @@ import { useState, useEffect, useCallback } from "react";
 import { MessageCircle, Search, Clock, User } from "lucide-react";
 import { toast } from "sonner";
 import { DashCard } from "@/components/dashboard/DashboardShell";
-import { supabase } from "@/lib/supabase";
 import { adminGetConversations, type ConversationWithParticipant } from "@/lib/queries-client";
-import type { RealtimeChannel } from "@supabase/supabase-js";
 
 /**
  * QueriesList - Admin view of all customer conversations
  * 
  * Features:
  * - Paginated list (50 per page with Load More)
- * - Real-time alerts for new conversations (WebSocket on customer_conversations INSERT)
- * - Click to view conversation detail (Phase 6)
+ * - Polling for new conversations (backend API only)
+ * - Click to view conversation detail
  * - Unread message badges
  * - Search by customer name/email
  */
@@ -24,7 +22,6 @@ export function QueriesList({ onSelectConversation }: { onSelectConversation: (i
   const [searchQuery, setSearchQuery] = useState("");
   const [page, setPage] = useState(1);
   const [hasMore, setHasMore] = useState(false);
-  const [channel, setChannel] = useState<RealtimeChannel | null>(null);
 
   const PAGE_SIZE = 50;
 
@@ -64,50 +61,15 @@ export function QueriesList({ onSelectConversation }: { onSelectConversation: (i
     loadConversations(1, false);
   }, [loadConversations]);
 
-  // Real-time subscription for NEW conversations only
+  // Polling for new conversations (every 10 seconds when on this page)
   useEffect(() => {
-    // Subscribe to INSERT events on customer_conversations table
-    const newChannel = supabase
-      .channel("admin-queries-list")
-      .on(
-        "postgres_changes",
-        {
-          event: "INSERT",
-          schema: "public",
-          table: "customer_conversations",
-        },
-        async (payload) => {
-          console.log("[QueriesList] New conversation:", payload.new);
+    const interval = setInterval(() => {
+      // Silently refresh first page to check for new conversations
+      loadConversations(1, false);
+    }, 10000); // Poll every 10 seconds
 
-          // Fetch full conversation details (with participant info)
-          try {
-            const res = await adminGetConversations({ page: 1, limit: 1 });
-            if (res.conversations.length > 0) {
-              const newConvo = res.conversations[0];
-              // Prepend to list if it's truly new
-              setConversations((prev) => {
-                if (prev.some((c) => c.id === newConvo.id)) return prev;
-                return [newConvo, ...prev];
-              });
-              toast.success("New customer query received");
-            }
-          } catch (err) {
-            console.error("[QueriesList] Failed to fetch new conversation:", err);
-          }
-        }
-      )
-      .subscribe((status) => {
-        console.log("[QueriesList] Realtime subscription status:", status);
-      });
-
-    setChannel(newChannel);
-
-    // Cleanup on unmount
-    return () => {
-      console.log("[QueriesList] Unsubscribing from realtime");
-      newChannel.unsubscribe();
-    };
-  }, []); // Only subscribe once
+    return () => clearInterval(interval);
+  }, [loadConversations]);
 
   const handleLoadMore = () => {
     const nextPage = page + 1;

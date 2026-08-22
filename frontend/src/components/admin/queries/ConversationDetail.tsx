@@ -2,7 +2,6 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { ArrowLeft, Send, User, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { DashCard } from "@/components/dashboard/DashboardShell";
-import { supabase } from "@/lib/supabase";
 import {
   getAdminConversationDetail,
   sendAdminMessage,
@@ -10,18 +9,16 @@ import {
   type Message,
   type Conversation,
 } from "@/lib/queries-client";
-import type { RealtimeChannel } from "@supabase/supabase-js";
 
 /**
  * ConversationDetail - Admin view of a single conversation
  * 
  * Features:
  * - Display all messages in conversation
- * - Real-time message updates via WebSocket (conversation-specific filter)
+ * - Polling for new messages (backend API only)
  * - Send admin replies
  * - Mark conversation as read
  * - Auto-scroll to bottom on new messages
- * - Tab blur/focus management
  */
 
 export function ConversationDetail({
@@ -36,10 +33,11 @@ export function ConversationDetail({
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
   const [messageText, setMessageText] = useState("");
-  const [channel, setChannel] = useState<RealtimeChannel | null>(null);
   
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const pollingIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const lastFetchTimeRef = useRef<number>(Date.now());
 
   // Auto-scroll to bottom
   const scrollToBottom = useCallback(() => {
@@ -77,20 +75,14 @@ export function ConversationDetail({
     loadConversation();
   }, [loadConversation]);
 
-  // Real-time subscription for NEW messages in THIS conversation
+  // Polling-only for new messages (backend API only)
   useEffect(() => {
-    let activeChannel: RealtimeChannel | null = null;
-    let pollingInterval: NodeJS.Timeout | null = null;
-    let lastFetchTime: number = Date.now();
-    let usePolling = false;
     let mounted = true;
 
-    // Polling fallback
     const startPolling = () => {
       if (!mounted) return;
-      usePolling = true;
 
-      pollingInterval = setInterval(async () => {
+      pollingIntervalRef.current = setInterval(async () => {
         if (!mounted) return;
         
         try {
@@ -98,11 +90,11 @@ export function ConversationDetail({
           
           // Find messages newer than last fetch
           const newMessages = res.messages.filter(m => 
-            new Date(m.created_at).getTime() > lastFetchTime
+            new Date(m.created_at).getTime() > lastFetchTimeRef.current
           );
 
           if (newMessages.length > 0) {
-            lastFetchTime = Date.now();
+            lastFetchTimeRef.current = Date.now();
             
             setMessages((prev) => {
               const combined = [...prev];
@@ -120,95 +112,23 @@ export function ConversationDetail({
         } catch (err) {
           // Silently handle polling errors
         }
-      }, 5000);
+      }, 5000); // Poll every 5 seconds
     };
 
     const stopPolling = () => {
-      if (pollingInterval) {
-        clearInterval(pollingInterval);
-        pollingInterval = null;
+      if (pollingIntervalRef.current) {
+        clearInterval(pollingIntervalRef.current);
+        pollingIntervalRef.current = null;
       }
     };
 
-    const subscribe = () => {
-      if (!mounted) return;
-      
-      // Guard: prevent duplicate subscriptions
-      if (activeChannel) {
-        return;
-      }
-
-      activeChannel = supabase
-        .channel(`admin_conversation_${conversationId}`)
-        .on(
-          "postgres_changes",
-          {
-            event: "INSERT",
-            schema: "public",
-            table: "conversation_messages",
-            filter: `conversation_id=eq.${conversationId}`,
-          },
-          (payload) => {
-            if (!mounted) return;
-            const newMessage = payload.new as Message;
-            
-            setMessages((prev) => {
-              if (prev.some((m) => m.id === newMessage.id)) return prev;
-              return [...prev, newMessage];
-            });
-
-            setTimeout(scrollToBottom, 100);
-          }
-        )
-        .subscribe((status) => {
-          if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
-            unsubscribe();
-            startPolling();
-          } else if (status === 'SUBSCRIBED') {
-            stopPolling();
-          }
-        });
-
-      setChannel(activeChannel);
-
-      // Fallback timeout
-      setTimeout(() => {
-        if (activeChannel && !usePolling && mounted) {
-          startPolling();
-        }
-      }, 5000);
-    };
-
-    const unsubscribe = () => {
-      if (activeChannel) {
-        supabase.removeChannel(activeChannel);
-        activeChannel = null;
-        setChannel(null);
-      }
-      stopPolling();
-    };
-
-    // Initial subscription
-    subscribe();
-
-    // Tab blur/focus management
-    const handleVisibilityChange = () => {
-      if (document.hidden) {
-        console.log("[ConversationDetail] Tab hidden, pausing updates");
-        unsubscribe();
-      } else {
-        console.log("[ConversationDetail] Tab visible, resuming updates");
-        if (mounted) subscribe();
-      }
-    };
-
-    document.addEventListener("visibilitychange", handleVisibilityChange);
+    // Start polling immediately
+    startPolling();
 
     // Cleanup on unmount or conversationId change
     return () => {
       mounted = false;
-      unsubscribe();
-      document.removeEventListener("visibilitychange", handleVisibilityChange);
+      stopPolling();
     };
   }, [conversationId, scrollToBottom]);
 
