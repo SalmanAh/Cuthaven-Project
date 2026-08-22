@@ -154,12 +154,10 @@ export default function CustomerChatWidget({
     // Polling fallback function
     const startPolling = () => {
       usePolling = true;
-      console.log("[CustomerChat] ⏰ Starting polling (5s interval)");
       
       pollingInterval = setInterval(async () => {
         try {
           const msgs = await getConversationMessages(conversationId);
-          console.log(`[CustomerChat] 📡 Polling check - Total messages: ${msgs.length}, LastFetchTime: ${new Date(lastFetchTime).toISOString()}`);
           
           // Find new messages since last check
           const newMessages = msgs.filter(m => 
@@ -167,7 +165,6 @@ export default function CustomerChatWidget({
           );
 
           if (newMessages.length > 0) {
-            console.log(`[CustomerChat] ✅ Found ${newMessages.length} new message(s)`);
             lastFetchTime = Date.now();
             
             setMessages((prev) => {
@@ -187,11 +184,9 @@ export default function CustomerChatWidget({
               await markConversationAsRead(conversationId);
               onUnreadCountChange(0);
             }
-          } else {
-            console.log(`[CustomerChat] 📭 No new messages`);
           }
         } catch (err) {
-          console.error("[CustomerChat] ❌ Polling error:", err);
+          // Silently handle polling errors
         }
       }, 5000);
     };
@@ -235,15 +230,11 @@ export default function CustomerChatWidget({
           }
         )
         .subscribe((status) => {
-          console.log(`[CustomerChat] 🔌 WebSocket status: ${status}`);
-          
           // If WebSocket fails, switch to polling
           if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
-            console.warn("[CustomerChat] ⚠️ WebSocket failed, switching to polling");
             unsubscribe();
             startPolling();
           } else if (status === 'SUBSCRIBED') {
-            console.log("[CustomerChat] ✅ WebSocket connected successfully");
             stopPolling();
           }
         });
@@ -253,7 +244,6 @@ export default function CustomerChatWidget({
       // Fallback: If not subscribed within 5 seconds, use polling
       setTimeout(() => {
         if (channel && !usePolling) {
-          console.warn("[CustomerChat] ⏱️ WebSocket timeout (5s), switching to polling");
           startPolling();
         }
       }, 5000);
