@@ -30,6 +30,8 @@
 .env
 .env.*
 !.env.example
+!.env.production
+!.env.development
 
 # ── Node / npm / bun ──────────────────────────────────────────────────
 node_modules/
