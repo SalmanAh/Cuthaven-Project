@@ -4,7 +4,7 @@ import { supabaseAdmin } from "../config/supabase.js";
 import { getPayPalAccessToken, getPayPalBaseURL } from "../config/paypal.js";
 import { calculateTax } from "../lib/calculateTax.js";
 import { sendOrderConfirmationEmail, type EmailOrderItem } from "../emails/orderConfirmation.js";
-import { env } from "../config/env.js";
+import { getActiveGatewayConfig } from "./payment-gateways.controller.js";
 
 // ─── Shared validation schemas (same as Stripe flow) ──────────────────────
 
@@ -50,10 +50,19 @@ const FREE_SHIPPING_THRESHOLD = 350_00; // cents
 // The frontend uses the orderId to render the PayPal button and capture payment.
 export async function createPayPalOrder(req: Request, res: Response, next: NextFunction) {
   try {
-    // ── 1. Check PayPal is configured ───────────────────────────────────────
-    const accessToken = await getPayPalAccessToken();
-    if (!accessToken) {
+    // ── 1. Get PayPal credentials from database ────────────────────────────
+    const paypalConfig = await getActiveGatewayConfig("paypal");
+    if (!paypalConfig || paypalConfig.type !== "paypal") {
       return res.status(503).json({ error: "PayPal is not configured on this server" });
+    }
+
+    const accessToken = await getPayPalAccessToken(
+      paypalConfig.clientId,
+      paypalConfig.clientSecret,
+      paypalConfig.mode
+    );
+    if (!accessToken) {
+      return res.status(503).json({ error: "Failed to authenticate with PayPal" });
     }
 
     // ── 2. Validate request body ────────────────────────────────────────────
@@ -132,7 +141,7 @@ export async function createPayPalOrder(req: Request, res: Response, next: NextF
     const orderNumber = `CUT-${Date.now().toString(36).toUpperCase()}`;
 
     // ── 6. Create PayPal order ──────────────────────────────────────────────
-    const paypalRes = await fetch(`${getPayPalBaseURL()}/v2/checkout/orders`, {
+    const paypalRes = await fetch(`${getPayPalBaseURL(paypalConfig.mode)}/v2/checkout/orders`, {
       method: "POST",
       headers: {
         "Content-Type":  "application/json",
@@ -241,12 +250,24 @@ export async function capturePayPalOrder(req: Request, res: Response, next: Next
       return res.status(400).json({ error: "paypalOrderId and checkoutData are required" });
     }
 
-    const accessToken = await getPayPalAccessToken();
-    if (!accessToken) return res.status(503).json({ error: "PayPal not configured" });
+    // Get PayPal credentials from database
+    const paypalConfig = await getActiveGatewayConfig("paypal");
+    if (!paypalConfig || paypalConfig.type !== "paypal") {
+      return res.status(503).json({ error: "PayPal not configured" });
+    }
+
+    const accessToken = await getPayPalAccessToken(
+      paypalConfig.clientId,
+      paypalConfig.clientSecret,
+      paypalConfig.mode
+    );
+    if (!accessToken) {
+      return res.status(503).json({ error: "Failed to authenticate with PayPal" });
+    }
 
     // Capture the payment
     const captureRes = await fetch(
-      `${getPayPalBaseURL()}/v2/checkout/orders/${paypalOrderId}/capture`,
+      `${getPayPalBaseURL(paypalConfig.mode)}/v2/checkout/orders/${paypalOrderId}/capture`,
       {
         method: "POST",
         headers: {
@@ -347,11 +368,13 @@ export async function capturePayPalOrder(req: Request, res: Response, next: Next
 // ─── GET /api/checkout/paypal/client-id ───────────────────────────────────
 // Returns the PayPal client ID (safe to expose — it's a public key).
 // The frontend uses it to initialise the PayPal JS SDK.
+// NOTE: This endpoint is deprecated - frontend should use /api/checkout/active-gateways instead
 export async function getPayPalClientId(req: Request, res: Response) {
-  if (!env.PAYPAL_CLIENT_ID) {
+  const paypalConfig = await getActiveGatewayConfig("paypal");
+  if (!paypalConfig || paypalConfig.type !== "paypal") {
     return res.status(503).json({ error: "PayPal not configured" });
   }
-  return res.json({ clientId: env.PAYPAL_CLIENT_ID });
+  return res.json({ clientId: paypalConfig.clientId });
 }
 
 function getEstimatedDelivery(): string {

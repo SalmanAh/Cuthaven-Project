@@ -169,9 +169,11 @@ export function Header() {
             >
               <div className="relative">
                 <ShoppingBag className="h-4 w-4 sm:h-5 sm:w-5" />
-                <span className="absolute top-0.5 right-0.5 min-w-[16px] h-[16px] sm:min-w-[18px] sm:h-[18px] rounded-full bg-primary text-primary-foreground text-[9px] sm:text-[10px] font-bold flex items-center justify-center px-0.5 sm:px-1">
-                  {count > 99 ? "99+" : count}
-                </span>
+                {count > 0 && (
+                  <span className="absolute -top-1 -right-1 min-w-[14px] h-[14px] sm:min-w-[16px] sm:h-[16px] rounded-full bg-primary text-primary-foreground text-[8px] sm:text-[9px] font-bold flex items-center justify-center px-0.5 z-10 border-2 border-surface">
+                    {count > 99 ? "99+" : count}
+                  </span>
+                )}
               </div>
               <span className="hidden xl:inline text-xs text-text-secondary whitespace-nowrap">
                 {count} items —{" "}

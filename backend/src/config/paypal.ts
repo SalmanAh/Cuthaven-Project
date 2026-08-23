@@ -1,20 +1,22 @@
-import { env } from "./env.js";
+// ─── PayPal REST API Helper Functions ─────────────────────────────────────
+// Updated to accept credentials as parameters instead of reading from env
+// This allows using database-stored credentials from payment_gateways table
 
-// ─── PayPal REST API credentials ───────────────────────────────────────────
-// Returns null if credentials are not configured — the controller handles
-// the graceful fallback (returns 503 so the frontend hides the PayPal button).
-
-export function getPayPalBaseURL(): string {
-  return env.PAYPAL_MODE === "live"
+export function getPayPalBaseURL(mode: "sandbox" | "live"): string {
+  return mode === "live"
     ? "https://api-m.paypal.com"
     : "https://api-m.sandbox.paypal.com";
 }
 
-export async function getPayPalAccessToken(): Promise<string | null> {
-  if (!env.PAYPAL_CLIENT_ID || !env.PAYPAL_CLIENT_SECRET) return null;
+export async function getPayPalAccessToken(
+  clientId: string,
+  clientSecret: string,
+  mode: "sandbox" | "live"
+): Promise<string | null> {
+  if (!clientId || !clientSecret) return null;
 
-  const auth = Buffer.from(`${env.PAYPAL_CLIENT_ID}:${env.PAYPAL_CLIENT_SECRET}`).toString("base64");
-  const res = await fetch(`${getPayPalBaseURL()}/v1/oauth2/token`, {
+  const auth = Buffer.from(`${clientId}:${clientSecret}`).toString("base64");
+  const res = await fetch(`${getPayPalBaseURL(mode)}/v1/oauth2/token`, {
     method: "POST",
     headers: {
       Authorization: `Basic ${auth}`,

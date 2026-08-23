@@ -1,6 +1,7 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
 import type { Product } from "@/data/products";
 import { useAuth } from "./AuthContext";
+import { toast } from "sonner";
 
 export interface CartItem {
   product: Product;
@@ -59,6 +60,9 @@ export function CartProvider({ children }: { children: ReactNode }) {
       }
       return [...prev, { product, quantity: Math.min(qty, max) }];
     });
+    
+    // Show toast notification once after state update
+    toast.success("Item added to cart successfully");
   };
   const removeItem = (id: string) => setItems((prev) => prev.filter((i) => i.product.id !== id));
   const updateQty = (id: string, qty: number) => {

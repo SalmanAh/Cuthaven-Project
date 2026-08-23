@@ -847,31 +847,6 @@ export async function confirmStripeOrder(
   });
 }
 
-// ─── Cash on Delivery order ────────────────────────────────────────────────
-
-export interface CodOrderResponse {
-  orderId: string;
-  orderNumber: string;
-  subtotal: number;
-  shippingCost: number;
-  taxAmount: number;
-  discountAmount: number;
-  total: number;
-}
-
-export async function createCodOrder(
-  items: CheckoutItem[],
-  shippingAddress: CheckoutShippingAddress,
-  customerNotes?: string,
-  couponCode?: string,
-): Promise<CodOrderResponse> {
-  return request("/checkout/cod-order", {
-    method: "POST",
-    body: { items, shippingAddress, customerNotes, couponCode },
-    auth: true,
-  });
-}
-
 // ─── Review eligibility check ──────────────────────────────────────────────
 
 export type CanReviewReason =

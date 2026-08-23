@@ -14,12 +14,10 @@ import {
   validateCoupon,
   getMyAddresses,
   confirmStripeOrder,
-  createCodOrder,
   getActiveGatewaysForCheckout,
   type PaymentIntentResponse,
   type PayPalOrderResponse,
   type CustomerAddress,
-  type CodOrderResponse,
 } from "@/lib/api-client";
 import { toast } from "sonner";
 
@@ -123,8 +121,7 @@ function CheckoutPage() {
   const [step, setStep] = useState<"details" | "payment">("details");
   const [intentData, setIntentData] = useState<PaymentIntentResponse | null>(null);
   const [paypalData, setPaypalData] = useState<PayPalOrderResponse | null>(null);
-  const [codData, setCodData] = useState<CodOrderResponse | null>(null);
-  const [paymentMethod, setPaymentMethod] = useState<"stripe" | "paypal" | "cod">("stripe");
+  const [paymentMethod, setPaymentMethod] = useState<"stripe" | "paypal">("stripe");
   const [creatingIntent, setCreatingIntent] = useState(false);
   const [savedAddresses, setSavedAddresses] = useState<CustomerAddress[]>([]);
 
@@ -150,8 +147,6 @@ function CheckoutPage() {
           setPaymentMethod("stripe");
         } else if (gateways.paypal) {
           setPaymentMethod("paypal");
-        } else {
-          setPaymentMethod("cod");
         }
       })
       .catch((err) => {
@@ -300,18 +295,7 @@ function CheckoutPage() {
         country: "US",
       };
 
-      if (paymentMethod === "cod") {
-        const data = await createCodOrder(
-          checkoutItems,
-          shippingAddr,
-          form.notes || undefined,
-          appliedCoupon?.code || undefined,
-        );
-        try {
-          sessionStorage.removeItem(FORM_KEY);
-        } catch {}
-        navigate({ to: "/order-confirmation", search: { orderId: data.orderId } });
-      } else if (paymentMethod === "paypal") {
+      if (paymentMethod === "paypal") {
         const data = await createPayPalOrder(
           checkoutItems,
           shippingAddr,
@@ -516,29 +500,10 @@ function CheckoutPage() {
                       PayPal
                     </button>
                   )}
-                  <button
-                    type="button"
-                    onClick={() => setPaymentMethod("cod")}
-                    className={`flex items-center justify-center gap-2 rounded-xl border-2 py-3 text-xs sm:text-sm font-semibold transition min-h-[44px] ${
-                      paymentMethod === "cod"
-                        ? "border-success bg-success/5 text-success"
-                        : "border-border text-text-secondary hover:border-success/40"
-                    }`}
-                  >
-                    <ShoppingBag className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
-                    <span className="hidden xs:inline">Cash on Delivery</span>
-                    <span className="xs:hidden">COD</span>
-                  </button>
                 </div>
-                {paymentMethod === "cod" && (
-                  <p className="text-[10px] sm:text-xs text-text-secondary mt-2">
-                    Pay in cash when your order arrives. Your order is confirmed immediately.
-                  </p>
-                )}
                 {!stripePromise && !paypalClientId && (
                   <p className="text-[10px] sm:text-xs text-warning mt-2">
-                    Online payment methods are currently unavailable. Only Cash on Delivery is
-                    available.
+                    No payment methods are currently available. Please contact support.
                   </p>
                 )}
               </div>
@@ -595,11 +560,7 @@ function CheckoutPage() {
                 className="btn-primary mt-5 sm:mt-6 w-full text-sm sm:text-base min-h-[44px]"
                 disabled={creatingIntent}
               >
-                {creatingIntent
-                  ? "Processing…"
-                  : paymentMethod === "cod"
-                    ? "Confirm Order →"
-                    : "Continue to Payment →"}
+                {creatingIntent ? "Processing…" : "Continue to Payment →"}
               </button>
             </form>
           ) : (
@@ -611,7 +572,6 @@ function CheckoutPage() {
                     setStep("details");
                     setIntentData(null);
                     setPaypalData(null);
-                    setCodData(null);
                   }}
                   className="text-xs sm:text-sm text-primary hover:underline"
                 >

@@ -282,8 +282,7 @@ export async function updateOrderStatus(req: Request, res: Response, next: NextF
 }
 
 // ─── PATCH /api/admin/orders/:id/payment-status ────────────────────────────
-// Allows admin to manually mark a COD order as paid when cash is collected.
-// Only applicable to orders with payment_status = "pending" (COD orders).
+// Allows admin to manually update payment status (e.g., mark as paid after manual payment).
 export async function updatePaymentStatus(req: Request, res: Response, next: NextFunction) {
   try {
     const { id } = req.params;
