@@ -1,6 +1,6 @@
 import type { Request, Response, NextFunction } from "express";
 import { z } from "zod";
-import { getStripeInstance, getStripeWebhookSecret } from "../config/stripe.js";
+import { getStripeInstance, getStripeWebhookConfig } from "../config/stripe.js";
 import { supabaseAdmin } from "../config/supabase.js";
 import { sendOrderConfirmationEmail, type EmailOrderItem } from "../emails/orderConfirmation.js";
 import { sendOrderShippedEmail } from "../emails/orderShipped.js";
@@ -359,29 +359,62 @@ export async function createPaymentIntent(req: Request, res: Response, next: Nex
 // This is the authoritative source of payment truth — not the frontend redirect.
 export async function stripeWebhook(req: Request, res: Response, next: NextFunction) {
   const sig = req.headers["stripe-signature"];
-  
-  // Fetch webhook secret from database (with env var fallback)
-  let webhookSecret: string;
+
+  // Stripe signs the exact request bytes. Reject requests that did not pass
+  // through the route-scoped raw parser, or that have an ambiguous signature
+  // header, before reading gateway credentials or attempting side effects.
+  if (!Buffer.isBuffer(req.body) || typeof sig !== "string") {
+    console.warn("[WEBHOOK]", {
+      result: "rejected",
+      reason: "invalid_request",
+      httpStatus: 400,
+    });
+    return res.status(400).json({ error: "Invalid webhook request" });
+  }
+
+  // Fetch the webhook verification configuration for the active Stripe gateway.
+  let webhookConfig: { gatewayId: string; secret: string };
   try {
-    webhookSecret = await getStripeWebhookSecret();
+    webhookConfig = await getStripeWebhookConfig();
   } catch (err) {
-    console.error("[WEBHOOK] Failed to get webhook secret:", err);
+    console.error("[WEBHOOK]", {
+      result: "configuration_error",
+      reason: err instanceof Error ? err.message : "unknown_error",
+      httpStatus: 500,
+    });
     return res.status(500).json({ error: "Webhook configuration error" });
   }
 
   let event;
-  if (webhookSecret && sig) {
+  if (webhookConfig.secret) {
     try {
       const stripe = await getStripeInstance();
-      event = stripe.webhooks.constructEvent(req.body as Buffer, sig, webhookSecret);
+      event = stripe.webhooks.constructEvent(req.body, sig, webhookConfig.secret);
     } catch {
-      console.error("[WEBHOOK] Signature verification failed — possible spoofed request");
+      console.warn("[WEBHOOK]", {
+        gatewayId: webhookConfig.gatewayId,
+        result: "rejected",
+        reason: "signature_verification_failed",
+        httpStatus: 400,
+      });
       return res.status(400).json({ error: "Webhook signature verification failed" });
     }
   } else {
-    console.error("[WEBHOOK] Missing webhook secret or signature");
+    console.error("[WEBHOOK]", {
+      gatewayId: webhookConfig.gatewayId,
+      result: "configuration_error",
+      reason: "missing_webhook_secret",
+      httpStatus: 400,
+    });
     return res.status(400).json({ error: "Webhook not configured" });
   }
+
+  const eventContext = {
+    eventId: event.id,
+    eventType: event.type,
+    gatewayId: webhookConfig.gatewayId,
+  };
+  console.info("[WEBHOOK]", { ...eventContext, result: "verified" });
 
   try {
     if (event.type === "payment_intent.succeeded") {
@@ -492,8 +525,14 @@ export async function stripeWebhook(req: Request, res: Response, next: NextFunct
         .eq("payment_transaction_id", pi.id);
     }
 
+    console.info("[WEBHOOK]", { ...eventContext, result: "processed", httpStatus: 200 });
     return res.json({ received: true });
   } catch (err) {
+    console.error("[WEBHOOK]", {
+      ...eventContext,
+      result: "processing_failed",
+      httpStatus: 500,
+    });
     next(err);
   }
 }
@@ -691,4 +730,3 @@ export async function confirmStripeOrder(req: Request, res: Response, next: Next
     return res.json({ orderId: order.id, orderNumber });
   } catch (err) { next(err); }
 }
-

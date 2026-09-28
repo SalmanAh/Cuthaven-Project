@@ -64,13 +64,13 @@ export async function getStripeInstance(): Promise<Stripe> {
 }
 
 /**
- * Returns the webhook secret for the active Stripe gateway.
+ * Returns the webhook verification configuration for the active Stripe gateway.
  * THROWS ERROR if no active gateway exists - NO FALLBACKS.
  */
-export async function getStripeWebhookSecret(): Promise<string> {
+export async function getStripeWebhookConfig(): Promise<{ gatewayId: string; secret: string }> {
   const { data: gateway, error } = await supabaseAdmin
     .from("payment_gateways")
-    .select("stripe_webhook_secret")
+    .select("id, stripe_webhook_secret")
     .eq("gateway_type", "stripe")
     .eq("is_active", true)
     .maybeSingle();
@@ -96,5 +96,5 @@ export async function getStripeWebhookSecret(): Promise<string> {
     );
   }
 
-  return gateway.stripe_webhook_secret;
+  return { gatewayId: gateway.id, secret: gateway.stripe_webhook_secret };
 }
