@@ -50,7 +50,7 @@ A defect becomes `VERIFIED` only when all of the following are true:
 |---|---|---|---|---|
 | CH-001 | P0 | CODE COMPLETE | Stripe webhook loses the raw body before signature verification | Payments |
 | CH-002 | P0 | CODE COMPLETE | Stripe can succeed without a database order; redirect fallback is invalid | Payments |
-| CH-003 | P0 | CONFIRMED | Order finalization, stock, coupon, history, and email are not atomic/idempotent | Payments |
+| CH-003 | P0 | CODE COMPLETE | Order finalization, stock, coupon, history, and email are not atomic/idempotent | Payments |
 | CH-004 | P0 | CONFIRMED | PayPal capture trusts browser-returned order data and omits stock deduction | Payments |
 | CH-005 | P0 | CONFIRMED | Customer-support routes do not enforce customer/guest ownership | Privacy |
 | CH-006 | P0 | CONFIRMED | Public order summary exposes full order data by UUID | Privacy |
@@ -396,7 +396,7 @@ Local verification evidence (2026-09-29): backend build and typecheck passed; 10
 ## CH-003 — Finalization and commerce side effects are not atomic or idempotent
 
 **Priority:** P0  
-**Status:** CONFIRMED  
+**Status:** CODE COMPLETE
 **Dependencies:** CH-002, CH-010  
 **Affected paths:** checkout/PayPal controllers, email sending, order history, coupon and stock RPCs
 
@@ -423,7 +423,23 @@ Local verification evidence (2026-09-29): backend build and typecheck passed; 10
 5. Write status history inside the finalization transaction.
 6. Insert a unique outbox event in the same transaction; deliver email outside the transaction with retries.
 7. Stop directly decrementing stock or incrementing coupon use from controllers.
-8. Return typed outcomes: `finalized`, `already_finalized`, `payment_mismatch`, `reservation_expired`, or `invalid_transition`.
+8. Return typed outcomes for finalization and release, including `finalized`, `already_finalized`, `released`, `already_released`, `payment_mismatch`, and `invalid_transition`.
+
+### Implemented behavior
+
+- `202609290001_ch003_atomic_checkout_finalization.sql` versions transactional draft creation, stock/coupon reservation, paid finalization, reservation release, order history, and a retryable outbox. Product and coupon rows are locked in stable order; nullable coupon counters are normalized safely.
+- Stripe webhook and browser confirmation use the same typed finalizer. Repeated finalization returns `already_finalized`; mismatched provider transactions are rejected. Failed-payment release also verifies the Stripe transaction before restoring inventory.
+- Checkout controllers no longer decrement stock, increment coupons, or send confirmation email directly. The unique outbox event is written with finalization and delivered by a worker using a stable Resend idempotency key.
+- Expired Stripe reservations are reconciled by checking provider state: successful payments finalize, while unpaid intents are cancelled before inventory is released.
+- The current PayPal capture path uses the same atomic database effects and a deterministic provider request ID. Its remaining trust in browser-supplied checkout data is deliberately tracked under CH-004.
+
+### Deployment and rollback
+
+1. Applied `202609280001_ch002_pending_stripe_orders.sql` first, then `202609290001_ch003_atomic_checkout_finalization.sql` in Supabase on 2026-09-29; the post-migration object check passed 12/12.
+2. Deploy the backend only after both migrations succeed, then run duplicate-delivery and concurrent stock/coupon checks in staging.
+3. If application rollout fails, roll back the backend before changing the schema. Preserve orders, reservations, and outbox rows for reconciliation; do not blindly restore stock for any payment that may have succeeded.
+
+Verification evidence (2026-09-29): backend TypeScript build and 13/13 tests passed; frontend production build passed; targeted lint for the two modified frontend files passed; `git diff --check` passed; both Supabase migrations were applied and all 12 schema/function checks returned `true`. The repository-wide frontend lint remains red from pre-existing unrelated debt tracked by CH-012. Real database concurrency tests, provider staging callbacks, and rollback exercise remain pending, so CH-003 is not yet `VERIFIED`.
 
 ### Required observability
 
@@ -442,8 +458,8 @@ Local verification evidence (2026-09-29): backend build and typecheck passed; 10
 
 ### Acceptance criteria
 
-- [ ] Database constraints and functions are version-controlled.
-- [ ] No controller contains a per-item stock-decrement loop for finalization.
+- [x] Database constraints and functions are version-controlled.
+- [x] No controller contains a per-item stock-decrement loop for finalization.
 - [ ] Duplicate provider delivery returns 2xx and does not duplicate effects.
 - [ ] An automated concurrency test covers stock and coupon limits.
 
@@ -1122,7 +1138,8 @@ Add concise evidence entries here; do not duplicate implementation detail alread
 |---|---|---|---|
 | 2026-09-28 | CH-001–CH-014 | -> CONFIRMED | Repository inspection, backend typecheck pass, frontend build pass, lint baseline recorded |
 | 2026-09-28 | CH-001 | CONFIRMED -> CODE COMPLETE | Raw route moved before JSON parser; 7/7 signature/middleware tests, build, and typecheck passed; staging acceptance pending |
-| 2026-09-29 | CH-002 | CONFIRMED -> CODE COMPLETE | Supabase-first pending order, internal-ID redirects, protected polling, 10/10 backend tests, targeted frontend lint and production build passed; migration/staging pending |
+| 2026-09-29 | CH-002 | CONFIRMED -> CODE COMPLETE | Supabase-first pending order, internal-ID redirects, protected polling, 10/10 backend tests, targeted frontend lint and production build passed; Supabase migration applied, staging pending |
+| 2026-09-29 | CH-003 | CONFIRMED -> CODE COMPLETE | Atomic reservation/finalization/release RPCs, transaction-bound outbox, Stripe reconciliation, and PayPal atomic effects implemented; local checks passed; Supabase migrations applied with 12/12 object checks true; concurrency/staging/rollback verification pending |
 
 ## 12. Sign-off
 

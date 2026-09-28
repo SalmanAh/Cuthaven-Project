@@ -1,10 +1,14 @@
 import type { Request, Response, NextFunction } from "express";
+import { createHash, randomBytes } from "node:crypto";
 import { z } from "zod";
 import { supabaseAdmin } from "../config/supabase.js";
 import { getPayPalAccessToken, getPayPalBaseURL } from "../config/paypal.js";
 import { calculateTax } from "../lib/calculateTax.js";
-import { sendOrderConfirmationEmail, type EmailOrderItem } from "../emails/orderConfirmation.js";
 import { getActiveGatewayConfig } from "./payment-gateways.controller.js";
+import {
+  createAndFinalizePaidOrder,
+  dispatchCheckoutOutbox,
+} from "../services/checkoutFinalization.service.js";
 
 // ─── Shared validation schemas (same as Stripe flow) ──────────────────────
 
@@ -273,6 +277,7 @@ export async function capturePayPalOrder(req: Request, res: Response, next: Next
         headers: {
           "Content-Type": "application/json",
           Authorization:  `Bearer ${accessToken}`,
+          "PayPal-Request-Id": `capture-${paypalOrderId}`,
         },
       },
     );
@@ -288,80 +293,72 @@ export async function capturePayPalOrder(req: Request, res: Response, next: Next
       return res.status(402).json({ error: "PayPal payment was not completed. Please try again." });
     }
 
-    // ── Payment succeeded — NOW create the DB order ─────────────────────────
+    const captureId = captureData.purchase_units?.[0]?.payments?.captures?.[0]?.id;
+    if (!captureId) {
+      return res.status(502).json({ error: "PayPal did not return a capture transaction ID" });
+    }
+
+    // Compatibility path until CH-004 moves PayPal draft creation before
+    // capture. All database side effects still commit in one transaction.
     let customerId: string | null = null;
     if (req.user) {
       const { data: cust } = await supabaseAdmin.from("customers").select("id").eq("auth_id", req.user.id).maybeSingle();
       customerId = cust?.id ?? null;
     }
 
-    const { data: order, error: orderError } = await supabaseAdmin
-      .from("orders")
-      .insert({
+    const confirmationToken = customerId ? null : randomBytes(32).toString("base64url");
+    const confirmationTokenHash = confirmationToken
+      ? createHash("sha256").update(confirmationToken).digest("hex")
+      : null;
+
+    const finalization = await createAndFinalizePaidOrder({
+      order: {
         order_number: checkoutData.orderNumber,
         customer_id: customerId,
-        status: "confirmed",
-        payment_status: "paid",
         subtotal:         checkoutData.subtotalCents / 100,
         shipping_cost:    checkoutData.shippingCents / 100,
         tax_amount:       checkoutData.taxCents / 100,
         discount_amount:  checkoutData.discountCents / 100,
         total:            checkoutData.totalCents / 100,
         shipping_address: checkoutData.shippingAddress,
-        billing_address:  checkoutData.shippingAddress,
-        payment_processor: "paypal",
-        payment_transaction_id: paypalOrderId,
         customer_notes:   checkoutData.customerNotes,
         coupon_id:        checkoutData.appliedCouponId,
-      })
-      .select("id, order_number, subtotal, shipping_cost, tax_amount, discount_amount, total, shipping_address, coupon_id")
-      .single();
+        confirmation_token_hash: confirmationTokenHash,
+      },
+      items: checkoutData.lineItems.map((item) => ({
+        product_id: item.productId,
+        product_name: item.productName,
+        product_slug: item.productSlug,
+        product_image: item.productImage,
+        quantity: item.quantity,
+        unit_price: item.unitPrice,
+        total_price: item.totalPrice,
+      })),
+      provider: "paypal",
+      transactionId: captureId,
+      providerEventId: `paypal-capture:${captureId}`,
+    });
 
-    if (orderError) throw orderError;
-
-    await supabaseAdmin.from("order_items").insert(
-      checkoutData.lineItems.map((i) => ({
-        order_id: order.id, product_id: i.productId,
-        product_name: i.productName, product_slug: i.productSlug,
-        product_image: i.productImage,
-        quantity: i.quantity, unit_price: i.unitPrice, total_price: i.totalPrice,
-      }))
+    console.info("[FINALIZE]", {
+      orderId: finalization.orderId,
+      provider: "paypal",
+      providerEventId: captureId,
+      result: finalization.outcome,
+    });
+    void dispatchCheckoutOutbox().catch((error) =>
+      console.error("[OUTBOX]", {
+        orderId: finalization.orderId,
+        result: "dispatch_failed",
+        reason: error instanceof Error ? error.message : "unknown_error",
+      }),
     );
 
-    // Increment coupon usage
-    if (checkoutData.appliedCouponId) {
-      await supabaseAdmin.rpc("increment_coupon_usage", { coupon_id: checkoutData.appliedCouponId }).then(() => {});
-    }
-
-    // ── Send confirmation email ─────────────────────────────────────────────
-    void (async () => {
-      try {
-        const addr = order.shipping_address as Record<string, string>;
-        let couponCode: string | undefined;
-        if (order.coupon_id) {
-          const { data: coupon } = await supabaseAdmin.from("coupons").select("code").eq("id", order.coupon_id).maybeSingle();
-          couponCode = (coupon as { code: string } | null)?.code;
-        }
-        await sendOrderConfirmationEmail({
-          to: addr.email, orderNumber: order.order_number, orderId: order.id,
-          items: checkoutData.lineItems.map((i) => ({
-            productName: i.productName, productImage: i.productImage,
-            quantity: i.quantity, unitPrice: i.unitPrice, totalPrice: i.totalPrice,
-          })),
-          subtotal: order.subtotal, shippingCost: order.shipping_cost,
-          taxAmount: order.tax_amount, discountAmount: order.discount_amount,
-          couponCode, total: order.total,
-          shippingAddress: {
-            firstName: addr.firstName ?? "", lastName: addr.lastName ?? "",
-            address: addr.address ?? "", city: addr.city ?? "",
-            state: addr.state ?? "", zip: addr.zip ?? "", country: addr.country ?? "US",
-          },
-          estimatedDelivery: getEstimatedDelivery(),
-        });
-      } catch (e: unknown) { console.error("[PAYPAL] Confirmation email failed (non-fatal):", e); }
-    })();
-
-    return res.json({ success: true, orderId: order.id, orderNumber: order.order_number });
+    return res.json({
+      success: true,
+      orderId: finalization.orderId,
+      orderNumber: checkoutData.orderNumber,
+      confirmationToken,
+    });
   } catch (err) { next(err); }
 }
 
@@ -375,20 +372,4 @@ export async function getPayPalClientId(req: Request, res: Response) {
     return res.status(503).json({ error: "PayPal not configured" });
   }
   return res.json({ clientId: paypalConfig.clientId });
-}
-
-function getEstimatedDelivery(): string {
-  const addBusinessDays = (date: Date, days: number): Date => {
-    const result = new Date(date);
-    let added = 0;
-    while (added < days) {
-      result.setDate(result.getDate() + 1);
-      const dow = result.getDay();
-      if (dow !== 0 && dow !== 6) added++;
-    }
-    return result;
-  };
-  const now = new Date();
-  const fmt = (d: Date) => d.toLocaleDateString("en-US", { month: "long", day: "numeric" });
-  return `${fmt(addBusinessDays(now, 5))} – ${fmt(addBusinessDays(now, 8))}`;
 }

@@ -441,8 +441,8 @@ The file-by-file implementation strategy, migrations, test matrix, rollout plan,
 ### P0 — live-order blockers
 
 1. **Stripe raw-body routing is code-complete; staging verification remains.** The webhook now mounts with route-scoped `express.raw()` before global JSON parsing, with signature/middleware regression coverage. See CH-001 in the remediation tracker.
-2. **Stripe paid-without-order prevention is code-complete; migration/staging remain.** A pending Supabase order now exists before Stripe exposes a payable intent, and redirects use the internal order ID. Apply the CH-002 migration before deploying.
-3. **Effects need idempotency.** Browser confirmation and webhook delivery can race/retry. Use a unique payment constraint and transaction/idempotency record so order, stock, coupon, history, and email happen exactly once. Stock can currently be attempted in both paths.
+2. **Stripe paid-without-order prevention is code-complete; staging verification remains.** A pending Supabase order now exists before Stripe exposes a payable intent, redirects use the internal order ID, and the CH-002 migration is installed.
+3. **Checkout-effect idempotency is code-complete; concurrency/staging verification remains.** Transactional RPCs now reserve/release stock and coupons, finalize each provider transaction once, write history, and enqueue one retryable confirmation email. CH-003 is installed; duplicate callbacks and stock/coupon races still require staging verification.
 4. **Do not use provider metadata as the only order draft.** Persist a pending server-side draft and put only its stable reference in payment metadata.
 5. **Run provider E2E tests.** Cover success, decline, duplicate/delayed webhook, invalid signature, browser close/retry, stock/coupon races, email failure, refund/failure, PayPal retry, and database interruption.
 

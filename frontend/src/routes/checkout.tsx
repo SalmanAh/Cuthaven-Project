@@ -617,13 +617,16 @@ function CheckoutPage() {
                 <PayPalScriptProvider options={{ clientId: paypalClientId, currency: "USD" }}>
                   <PayPalPaymentForm
                     paypalData={paypalData}
-                    onSuccess={(orderId) => {
+                    onSuccess={(orderId, confirmationToken) => {
                       try {
                         sessionStorage.removeItem(FORM_KEY);
                       } catch {
                         // Payment completion does not depend on browser storage.
                       }
-                      navigate({ to: "/order-confirmation", search: { orderId } });
+                      navigate({
+                        to: "/order-confirmation",
+                        search: { orderId, token: confirmationToken ?? undefined },
+                      });
                     }}
                   />
                 </PayPalScriptProvider>
@@ -726,7 +729,7 @@ function PayPalPaymentForm({
   onSuccess,
 }: {
   paypalData: PayPalOrderResponse;
-  onSuccess: (orderId: string) => void;
+  onSuccess: (orderId: string, confirmationToken: string | null) => void;
 }) {
   const [error, setError] = useState("");
 
@@ -763,7 +766,7 @@ function PayPalPaymentForm({
               paypalData._checkoutData,
             );
             if (result.success) {
-              onSuccess(result.orderId);
+              onSuccess(result.orderId, result.confirmationToken);
             } else {
               setError("Payment capture failed. Please contact support.");
             }

@@ -828,7 +828,12 @@ export async function createPayPalOrder(
 export async function capturePayPalOrder(
   paypalOrderId: string,
   checkoutData: PayPalOrderResponse["_checkoutData"],
-): Promise<{ success: boolean; orderId: string; orderNumber: string }> {
+): Promise<{
+  success: boolean;
+  orderId: string;
+  orderNumber: string;
+  confirmationToken: string | null;
+}> {
   return request("/checkout/paypal/capture-order", {
     method: "POST",
     body: { paypalOrderId, checkoutData },

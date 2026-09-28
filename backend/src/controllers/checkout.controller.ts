@@ -3,10 +3,13 @@ import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 import { z } from "zod";
 import { getStripeInstance, getStripeWebhookConfig } from "../config/stripe.js";
 import { supabaseAdmin } from "../config/supabase.js";
-import { sendOrderConfirmationEmail, type EmailOrderItem } from "../emails/orderConfirmation.js";
-import { sendOrderShippedEmail } from "../emails/orderShipped.js";
 import { calculateTax } from "../lib/calculateTax.js";
 import { createPendingStripeCheckout } from "../services/stripeCheckout.service.js";
+import {
+  dispatchCheckoutOutbox,
+  finalizePaidOrder,
+  releaseCheckoutReservation,
+} from "../services/checkoutFinalization.service.js";
 
 // ─── Validation schemas ────────────────────────────────────────────────────
 
@@ -275,8 +278,7 @@ export async function createPaymentIntent(req: Request, res: Response, next: Nex
       }
     }
 
-    // Coupon usage remains a finalization concern (CH-003). The pending draft
-    // records the selected coupon but does not consume it before payment.
+    // The transactional draft RPC revalidates and reserves coupon capacity.
 
     const totalCents = Math.max(0, subtotalCents + shippingCents + taxCents - discountCents);
 
@@ -336,33 +338,21 @@ export async function createPaymentIntent(req: Request, res: Response, next: Nex
       items: pendingItems,
     }, {
       createPendingOrder: async (input) => {
-        const { data: order, error: orderError } = await supabaseAdmin
-          .from("orders")
-          .insert({
+        const { data: orderId, error } = await supabaseAdmin.rpc("create_checkout_draft", {
+          p_order: {
             order_number: input.orderNumber,
             customer_id: input.customerId,
-            status: "pending",
-            payment_status: "pending",
             subtotal: input.subtotal,
             shipping_cost: input.shippingCost,
             tax_amount: input.taxAmount,
             discount_amount: input.discountAmount,
             total: input.total,
             shipping_address: input.shippingAddress,
-            billing_address: input.shippingAddress,
-            payment_processor: "stripe",
-            payment_transaction_id: null,
             customer_notes: input.customerNotes,
             coupon_id: input.couponId,
             confirmation_token_hash: input.confirmationTokenHash,
-          })
-          .select("id")
-          .single();
-        if (orderError) throw orderError;
-
-        const { error: itemsError } = await supabaseAdmin.from("order_items").insert(
-          input.items.map((item) => ({
-            order_id: order.id,
+          },
+          p_items: input.items.map((item) => ({
             product_id: item.productId,
             product_name: item.productName,
             product_slug: item.productSlug,
@@ -371,12 +361,10 @@ export async function createPaymentIntent(req: Request, res: Response, next: Nex
             unit_price: item.unitPrice,
             total_price: item.totalPrice,
           })),
-        );
-        if (itemsError) {
-          await supabaseAdmin.from("orders").delete().eq("id", order.id);
-          throw itemsError;
-        }
-        return order;
+        });
+        if (error) throw error;
+        if (typeof orderId !== "string") throw new Error("create_checkout_draft returned no order ID");
+        return { id: orderId };
       },
       createPaymentIntent: async (input) => {
         const paymentIntent = await stripe.paymentIntents.create({
@@ -403,11 +391,10 @@ export async function createPaymentIntent(req: Request, res: Response, next: Nex
         await stripe.paymentIntents.cancel(paymentIntentId);
       },
       markOrderFailed: async (orderId) => {
-        await supabaseAdmin
-          .from("orders")
-          .update({ status: "cancelled", payment_status: "failed", updated_at: new Date().toISOString() })
-          .eq("id", orderId)
-          .eq("payment_status", "pending");
+        const outcome = await releaseCheckoutReservation(orderId, "Stripe intent setup failed");
+        if (!new Set(["released", "already_released"]).has(outcome)) {
+          throw new Error(`Could not release checkout reservation: ${outcome}`);
+        }
       },
     });
 
@@ -501,130 +488,54 @@ export async function stripeWebhook(req: Request, res: Response, next: NextFunct
         return res.status(400).json({ error: "Payment is missing its internal order reference" });
       }
 
-      // Only the first pending -> paid transition performs downstream effects.
-      const { data: updatedOrders, error: updateError } = await supabaseAdmin
-        .from("orders")
-        .update({
-          status: "confirmed",
-          payment_status: "paid",
-          updated_at: new Date().toISOString(),
-        })
-        .eq("id", internalOrderId)
-        .eq("payment_transaction_id", pi.id)
-        .eq("payment_status", "pending")
-        .select("id, order_number, subtotal, shipping_cost, tax_amount, discount_amount, total, shipping_address, coupon_id")
-        .limit(1);
+      const startedAt = Date.now();
+      const outcome = await finalizePaidOrder({
+        orderId: internalOrderId,
+        provider: "stripe",
+        transactionId: pi.id,
+        providerEventId: event.id,
+      });
+      console.info("[FINALIZE]", {
+        orderId: internalOrderId,
+        provider: "stripe",
+        providerEventId: event.id,
+        result: outcome,
+        durationMs: Date.now() - startedAt,
+      });
 
-      if (updateError) throw updateError;
-      if (!updatedOrders?.length) {
-        const { data: existingOrder, error: lookupError } = await supabaseAdmin
-          .from("orders")
-          .select("id, payment_status")
-          .eq("id", internalOrderId)
-          .eq("payment_transaction_id", pi.id)
-          .maybeSingle();
-        if (lookupError) throw lookupError;
-        if (existingOrder?.payment_status === "paid") {
-          console.info("[WEBHOOK]", { ...eventContext, orderId: internalOrderId, result: "duplicate" });
-        } else {
-          throw new Error(`No pending order matches Stripe PaymentIntent ${pi.id}`);
-        }
+      if (outcome === "order_not_found") {
+        throw new Error(`No order matches Stripe PaymentIntent ${pi.id}`);
+      }
+      if (outcome === "payment_mismatch" || outcome === "invalid_transition") {
+        return res.status(409).json({ error: `Order finalization rejected: ${outcome}` });
       }
 
-      // 1a. Deduct stock for the order items (webhook backup)
-      if (updatedOrders && updatedOrders.length > 0) {
-        const order = updatedOrders[0];
-        const { data: orderItems } = await supabaseAdmin
-          .from("order_items")
-          .select("product_id, quantity")
-          .eq("order_id", order.id);
-
-        if (orderItems) {
-          for (const item of orderItems) {
-            const { error: stockError } = await supabaseAdmin.rpc("decrement_product_stock", {
-              product_id: item.product_id,
-              quantity: item.quantity,
-            });
-            if (stockError) {
-              // Stock already deducted by confirmStripeOrder — log but don't fail
-              console.warn("[WEBHOOK] Stock deduction skipped (may already be deducted):", stockError.message);
-            }
-          }
-        }
-      }
-
-      // 2. Send order confirmation email (best-effort — never blocks the webhook response)
-      if (updatedOrders && updatedOrders.length > 0) {
-        const order = updatedOrders[0];
-        const addr = order.shipping_address as Record<string, string>;
-
-        const { data: items } = await supabaseAdmin
-          .from("order_items")
-          .select("product_name, product_image, quantity, unit_price, total_price")
-          .eq("order_id", order.id);
-
-        // Resolve coupon code if one was used
-        let couponCode: string | undefined;
-        if (order.coupon_id) {
-          const { data: coupon } = await supabaseAdmin
-            .from("coupons").select("code").eq("id", order.coupon_id).maybeSingle();
-          couponCode = (coupon as { code: string } | null)?.code;
-        }
-
-        const emailItems: EmailOrderItem[] = (items ?? []).map((i: {
-          product_name: string;
-          product_image: string | null;
-          quantity: number;
-          unit_price: number;
-          total_price: number;
-        }) => ({
-          productName: i.product_name,
-          productImage: i.product_image,
-          quantity: i.quantity,
-          unitPrice: i.unit_price,
-          totalPrice: i.total_price,
-        }));
-
-        sendOrderConfirmationEmail({
-          to: addr.email,
-          orderNumber: order.order_number,
-          orderId: order.id,
-          items: emailItems,
-          subtotal: order.subtotal,
-          shippingCost: order.shipping_cost,
-          taxAmount: order.tax_amount,
-          discountAmount: order.discount_amount,
-          couponCode,
-          total: order.total,
-          shippingAddress: {
-            firstName: addr.firstName ?? "",
-            lastName:  addr.lastName  ?? "",
-            address:   addr.address   ?? "",
-            city:      addr.city      ?? "",
-            state:     addr.state     ?? "",
-            zip:       addr.zip       ?? "",
-            country:   addr.country   ?? "US",
-          },
-          estimatedDelivery: getEstimatedDelivery(),
-        }).catch((err) =>
-          console.error("[WEBHOOK] Confirmation email error (non-fatal):", err),
-        );
-      }
+      // Delivery is outside the database transaction. The unique outbox row
+      // and Resend idempotency key make this safe to retry after process failure.
+      void dispatchCheckoutOutbox().catch((error) =>
+        console.error("[OUTBOX]", {
+          orderId: internalOrderId,
+          result: "dispatch_failed",
+          reason: error instanceof Error ? error.message : "unknown_error",
+        }),
+      );
     }
 
     if (event.type === "payment_intent.payment_failed") {
       const pi = event.data.object as { id: string; metadata?: { orderId?: string } };
-      const { error: failureUpdateError } = await supabaseAdmin
-        .from("orders")
-        .update({
-          status: "cancelled",
-          payment_status: "failed",
-          updated_at: new Date().toISOString(),
-        })
-        .eq("id", pi.metadata?.orderId ?? "")
-        .eq("payment_transaction_id", pi.id)
-        .eq("payment_status", "pending");
-      if (failureUpdateError) throw failureUpdateError;
+      const internalOrderId = pi.metadata?.orderId;
+      if (internalOrderId && z.string().uuid().safeParse(internalOrderId).success) {
+        const outcome = await releaseCheckoutReservation(internalOrderId, "Stripe payment failed", {
+          provider: "stripe",
+          transactionId: pi.id,
+        });
+        console.info("[RESERVATION]", {
+          orderId: internalOrderId,
+          provider: "stripe",
+          providerEventId: event.id,
+          result: outcome,
+        });
+      }
     }
 
     console.info("[WEBHOOK]", { ...eventContext, result: "processed", httpStatus: 200 });
@@ -640,29 +551,6 @@ export async function stripeWebhook(req: Request, res: Response, next: NextFunct
 }
 
 // ─── Helpers ───────────────────────────────────────────────────────────────
-
-// Returns a human-readable estimated delivery window (5–8 business days from now).
-function getEstimatedDelivery(): string {
-  const addBusinessDays = (date: Date, days: number): Date => {
-    const result = new Date(date);
-    let added = 0;
-    while (added < days) {
-      result.setDate(result.getDate() + 1);
-      const dow = result.getDay();
-      if (dow !== 0 && dow !== 6) added++; // skip weekends
-    }
-    return result;
-  };
-
-  const now = new Date();
-  const earliest = addBusinessDays(now, 5);
-  const latest = addBusinessDays(now, 8);
-
-  const fmt = (d: Date) =>
-    d.toLocaleDateString("en-US", { month: "long", day: "numeric" });
-
-  return `${fmt(earliest)} – ${fmt(latest)}`;
-}
 
 function hashConfirmationToken(token: string): string {
   return createHash("sha256").update(token).digest("hex");
@@ -764,11 +652,34 @@ export async function confirmStripeOrder(req: Request, res: Response, next: Next
       return res.status(400).json({ error: "Payment has not been completed" });
     }
 
+    let status = order.status;
+    let paymentStatus = order.payment_status;
+    if (paymentIntent.status === "succeeded") {
+      const outcome = await finalizePaidOrder({
+        orderId: order.id,
+        provider: "stripe",
+        transactionId: order.payment_transaction_id,
+        providerEventId: `browser:${paymentIntent.id}`,
+      });
+      if (!new Set(["finalized", "already_finalized"]).has(outcome)) {
+        return res.status(409).json({ error: `Order finalization rejected: ${outcome}` });
+      }
+      status = "confirmed";
+      paymentStatus = "paid";
+      void dispatchCheckoutOutbox().catch((error) =>
+        console.error("[OUTBOX]", {
+          orderId: order.id,
+          result: "dispatch_failed",
+          reason: error instanceof Error ? error.message : "unknown_error",
+        }),
+      );
+    }
+
     return res.json({
       orderId: order.id,
       orderNumber: order.order_number,
-      status: order.status,
-      paymentStatus: order.payment_status,
+      status,
+      paymentStatus,
     });
   } catch (err) { next(err); }
 }

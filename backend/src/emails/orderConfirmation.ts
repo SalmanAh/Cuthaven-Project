@@ -273,27 +273,35 @@ Questions? support@cuthaven.com | +1 (406) 229-9045
 
 // ─── Send function ──────────────────────────────────────────────────────────
 
-export async function sendOrderConfirmationEmail(data: OrderConfirmationData): Promise<void> {
+export async function sendOrderConfirmationEmail(
+  data: OrderConfirmationData,
+  idempotencyKey?: string,
+): Promise<void> {
   if (!env.RESEND_API_KEY) {
-    // Dev fallback — log to console so developers can see what would be sent
+    if (env.NODE_ENV === "production") {
+      throw new Error("RESEND_API_KEY is required to deliver order confirmation email");
+    }
+    // Development/test fallback — log what would be sent.
     console.log(
       `[EMAIL SKIPPED — no RESEND_API_KEY] Would send order confirmation to ${data.to} for order ${data.orderNumber}`,
     );
     return;
   }
 
-  const { error } = await resend.emails.send({
-    from: FROM_EMAIL,
-    to: data.to,
-    subject: `Order Confirmed — ${data.orderNumber} | CutHaven`,
-    html: buildConfirmationHtml(data),
-    text: buildConfirmationText(data),
-  });
+  const { error } = await resend.emails.send(
+    {
+      from: FROM_EMAIL,
+      to: data.to,
+      subject: `Order Confirmed — ${data.orderNumber} | CutHaven`,
+      html: buildConfirmationHtml(data),
+      text: buildConfirmationText(data),
+    },
+    idempotencyKey ? { idempotencyKey } : undefined,
+  );
 
   if (error) {
-    // Log but don't throw — a failed email should never crash the webhook handler
-    // or cause Stripe to retry (which could double-confirm orders)
     console.error(`[EMAIL ERROR] Failed to send order confirmation for ${data.orderNumber}:`, error);
+    throw new Error(`Order confirmation email failed: ${error.message}`);
   } else {
     console.log(`[EMAIL] Order confirmation sent to ${data.to} for ${data.orderNumber}`);
   }
