@@ -249,8 +249,9 @@ export interface CheckoutShippingAddress {
 
 export interface PaymentIntentResponse {
   clientSecret: string;
-  paymentIntentId: string;
+  orderId: string;
   orderNumber: string;
+  confirmationToken: string | null;
   subtotal: number;
   shippingCost: number;
   taxAmount: number;
@@ -258,7 +259,6 @@ export interface PaymentIntentResponse {
   taxRate: number;
   discountAmount: number;
   total: number;
-  checkoutToken: string;
 }
 
 export async function createPaymentIntent(
@@ -347,6 +347,7 @@ export interface OrderSummary {
     id: string;
     order_number: string;
     status: string;
+    payment_status: string;
     subtotal: number;
     shipping_cost: number;
     tax_amount: number;
@@ -364,8 +365,12 @@ export interface OrderSummary {
   }>;
 }
 
-export async function getOrderSummary(orderId: string): Promise<OrderSummary> {
-  return request<OrderSummary>(`/checkout/order/${orderId}`);
+export async function getOrderSummary(
+  orderId: string,
+  confirmationToken?: string,
+): Promise<OrderSummary> {
+  const query = confirmationToken ? `?token=${encodeURIComponent(confirmationToken)}` : "";
+  return request<OrderSummary>(`/checkout/order/${orderId}${query}`, { auth: true });
 }
 
 // ─── Admin types ───────────────────────────────────────────────────────────
@@ -838,11 +843,12 @@ export async function getPayPalClientId(): Promise<{ clientId: string }> {
 // ─── Confirm Stripe order (called after stripe.confirmPayment succeeds) ────
 
 export async function confirmStripeOrder(
-  paymentIntentId: string,
-): Promise<{ orderId: string; orderNumber: string }> {
+  orderId: string,
+  confirmationToken?: string,
+): Promise<{ orderId: string; orderNumber: string; status: string; paymentStatus: string }> {
   return request("/checkout/confirm-stripe-order", {
     method: "POST",
-    body: { paymentIntentId },
+    body: { orderId, confirmationToken },
     auth: true,
   });
 }

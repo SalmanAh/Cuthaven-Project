@@ -177,7 +177,9 @@ function CheckoutPage() {
   useEffect(() => {
     try {
       sessionStorage.setItem(FORM_KEY, JSON.stringify(form));
-    } catch {}
+    } catch {
+      // Checkout still works when browser storage is unavailable.
+    }
   }, [form]);
 
   // Pre-fill form with logged-in user's name and email
@@ -220,8 +222,8 @@ function CheckoutPage() {
       });
       setCouponInput("");
       toast.success(`Coupon "${result.code}" applied — $${result.discountAmount.toFixed(2)} off!`);
-    } catch (err: any) {
-      toast.error(err.message ?? "Invalid coupon code");
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : "Invalid coupon code");
     } finally {
       setCouponLoading(false);
     }
@@ -587,19 +589,24 @@ function CheckoutPage() {
                 >
                   <StripePaymentForm
                     intentData={intentData}
-                    onSuccess={async (paymentIntentId) => {
+                    onSuccess={async () => {
                       try {
-                        const { orderId } = await confirmStripeOrder(paymentIntentId);
-                        sessionStorage.removeItem(FORM_KEY);
-                        navigate({ to: "/order-confirmation", search: { orderId } });
+                        await confirmStripeOrder(
+                          intentData.orderId,
+                          intentData.confirmationToken ?? undefined,
+                        );
                       } catch {
-                        // Webhook will handle it — redirect to confirmation with paymentIntentId as fallback
-                        sessionStorage.removeItem(FORM_KEY);
-                        navigate({
-                          to: "/order-confirmation",
-                          search: { orderId: paymentIntentId },
-                        });
+                        // The signed webhook remains authoritative. Continue to
+                        // the internal order page, which polls boundedly.
                       }
+                      sessionStorage.removeItem(FORM_KEY);
+                      navigate({
+                        to: "/order-confirmation",
+                        search: {
+                          orderId: intentData.orderId,
+                          token: intentData.confirmationToken ?? undefined,
+                        },
+                      });
                     }}
                   />
                 </Elements>
@@ -613,7 +620,9 @@ function CheckoutPage() {
                     onSuccess={(orderId) => {
                       try {
                         sessionStorage.removeItem(FORM_KEY);
-                      } catch {}
+                      } catch {
+                        // Payment completion does not depend on browser storage.
+                      }
                       navigate({ to: "/order-confirmation", search: { orderId } });
                     }}
                   />
@@ -785,7 +794,7 @@ function StripePaymentForm({
   onSuccess,
 }: {
   intentData: PaymentIntentResponse;
-  onSuccess: (paymentIntentId: string) => Promise<void>;
+  onSuccess: () => Promise<void>;
 }) {
   const stripe = useStripe();
   const elements = useElements();
@@ -798,10 +807,15 @@ function StripePaymentForm({
     setLoading(true);
     setError("");
 
-    const { error: confirmError, paymentIntent } = await stripe.confirmPayment({
+    const confirmationQuery = new URLSearchParams({ orderId: intentData.orderId });
+    if (intentData.confirmationToken) {
+      confirmationQuery.set("token", intentData.confirmationToken);
+    }
+
+    const { error: confirmError } = await stripe.confirmPayment({
       elements,
       confirmParams: {
-        return_url: `${window.location.origin}/order-confirmation?piid=${intentData.checkoutToken}`,
+        return_url: `${window.location.origin}/order-confirmation?${confirmationQuery.toString()}`,
       },
       redirect: "if_required",
     });
@@ -812,8 +826,7 @@ function StripePaymentForm({
       return;
     }
 
-    const piId = paymentIntent?.id ?? intentData.checkoutToken;
-    await onSuccess(piId);
+    await onSuccess();
   };
 
   return (

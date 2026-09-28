@@ -12,7 +12,7 @@ checkoutRouter.get("/active-gateways", getActiveGatewaysForCheckout);
 // Coupon validation — public
 checkoutRouter.post("/validate-coupon", validateCoupon);
 
-// Stripe: create intent (no DB order), then confirm after payment
+// Stripe: persist pending order, then create/verify the provider payment.
 checkoutRouter.post("/payment-intent",        optionalAuth, createPaymentIntent);
 checkoutRouter.post("/confirm-stripe-order",  optionalAuth, confirmStripeOrder);
 
@@ -21,5 +21,5 @@ checkoutRouter.get(  "/paypal/client-id",    getPayPalClientId);
 checkoutRouter.post( "/paypal/create-order", optionalAuth, createPayPalOrder);
 checkoutRouter.post( "/paypal/capture-order",optionalAuth, capturePayPalOrder);
 
-// Order summary for confirmation page — public
-checkoutRouter.get("/order/:id", getOrderSummary);
+// Order status/summary requires customer ownership or the guest token.
+checkoutRouter.get("/order/:id", optionalAuth, getOrderSummary);

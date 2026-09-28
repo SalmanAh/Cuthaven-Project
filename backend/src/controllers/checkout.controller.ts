@@ -1,10 +1,12 @@
 import type { Request, Response, NextFunction } from "express";
+import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 import { z } from "zod";
 import { getStripeInstance, getStripeWebhookConfig } from "../config/stripe.js";
 import { supabaseAdmin } from "../config/supabase.js";
 import { sendOrderConfirmationEmail, type EmailOrderItem } from "../emails/orderConfirmation.js";
 import { sendOrderShippedEmail } from "../emails/orderShipped.js";
 import { calculateTax } from "../lib/calculateTax.js";
+import { createPendingStripeCheckout } from "../services/stripeCheckout.service.js";
 
 // ─── Validation schemas ────────────────────────────────────────────────────
 
@@ -273,15 +275,13 @@ export async function createPaymentIntent(req: Request, res: Response, next: Nex
       }
     }
 
-    // NOTE: used_count is incremented in confirmStripeOrder AFTER the order row
-    // is successfully created — not here. Incrementing here (before the order exists)
-    // caused orphaned increments whenever the browser closed between payment and
-    // order creation, and meant the reuse check could never find the order.
+    // Coupon usage remains a finalization concern (CH-003). The pending draft
+    // records the selected coupon but does not consume it before payment.
 
     const totalCents = Math.max(0, subtotalCents + shippingCents + taxCents - discountCents);
 
     // ── 3. Generate order number ─────────────────────────────────────────────
-    const orderNumber = `CUT-${Date.now().toString(36).toUpperCase()}`;
+    const orderNumber = `CUT-${Date.now().toString(36).toUpperCase()}-${randomBytes(3).toString("hex").toUpperCase()}`;
 
     const shippingAddressJson = {
       firstName: shippingAddress.firstName,
@@ -295,50 +295,128 @@ export async function createPaymentIntent(req: Request, res: Response, next: Nex
       country:   shippingAddress.country,
     };
 
-    // ── 4. Create Stripe PaymentIntent (using database-configured gateway) ──
+    let customerId: string | null = null;
+    if (req.user) {
+      const { data: customer, error: customerError } = await supabaseAdmin
+        .from("customers")
+        .select("id")
+        .eq("auth_id", req.user.id)
+        .maybeSingle();
+      if (customerError) throw customerError;
+      customerId = customer?.id ?? null;
+    }
+
+    const confirmationToken = customerId ? null : randomBytes(32).toString("base64url");
+    const confirmationTokenHash = confirmationToken ? hashConfirmationToken(confirmationToken) : null;
+    const pendingItems = lineItems.map(({ product, item, unitPriceCents, lineTotalCents }) => ({
+      productId: product.id,
+      productName: product.name,
+      productSlug: product.slug,
+      productImage: product.primary_image_url ?? null,
+      quantity: item.quantity,
+      unitPrice: unitPriceCents / 100,
+      totalPrice: lineTotalCents / 100,
+    }));
+
+    // ── 4. Persist the complete pending order before creating Stripe intent ─
     const stripe = await getStripeInstance();
-    const paymentIntent = await stripe.paymentIntents.create({
-      amount: totalCents,
-      currency: "usd",
-      metadata: {
-        orderNumber,
-        customerId: req.user?.id ?? "guest",
-        customerEmail: shippingAddress.email,
-        // Store everything needed to create the DB order after payment succeeds.
-        // We do NOT create the DB order here — only after stripe.confirmPayment
-        // succeeds on the frontend (or the webhook fires as a backup).
-        shippingAddress: JSON.stringify(shippingAddressJson),
-        customerNotes: customerNotes ?? "",
-        couponCode: couponCode ?? "",
-        appliedCouponId: appliedCouponId ?? "",
-        subtotal: String(subtotalCents),
-        shippingCents: String(shippingCents),
-        taxCents: String(taxCents),
-        discountCents: String(discountCents),
-        totalCents: String(totalCents),
-        taxJurisdiction: taxResult.jurisdiction,
-        taxRate: String(taxResult.taxRate),
-        lineItems: JSON.stringify(lineItems.map(({ product, item, unitPriceCents, lineTotalCents }) => ({
-          productId: product.id,
-          productName: product.name,
-          productSlug: product.slug,
-          productImage: product.primary_image_url ?? null,
-          quantity: item.quantity,
-          unitPrice: unitPriceCents / 100,
-          totalPrice: lineTotalCents / 100,
-        }))),
+    const checkout = await createPendingStripeCheckout({
+      orderNumber,
+      customerId,
+      confirmationTokenHash,
+      subtotal: subtotalCents / 100,
+      shippingCost: shippingCents / 100,
+      taxAmount: taxCents / 100,
+      discountAmount: discountCents / 100,
+      total: totalCents / 100,
+      shippingAddress: shippingAddressJson,
+      customerNotes: customerNotes ?? null,
+      couponId: appliedCouponId,
+      customerEmail: shippingAddress.email,
+      items: pendingItems,
+    }, {
+      createPendingOrder: async (input) => {
+        const { data: order, error: orderError } = await supabaseAdmin
+          .from("orders")
+          .insert({
+            order_number: input.orderNumber,
+            customer_id: input.customerId,
+            status: "pending",
+            payment_status: "pending",
+            subtotal: input.subtotal,
+            shipping_cost: input.shippingCost,
+            tax_amount: input.taxAmount,
+            discount_amount: input.discountAmount,
+            total: input.total,
+            shipping_address: input.shippingAddress,
+            billing_address: input.shippingAddress,
+            payment_processor: "stripe",
+            payment_transaction_id: null,
+            customer_notes: input.customerNotes,
+            coupon_id: input.couponId,
+            confirmation_token_hash: input.confirmationTokenHash,
+          })
+          .select("id")
+          .single();
+        if (orderError) throw orderError;
+
+        const { error: itemsError } = await supabaseAdmin.from("order_items").insert(
+          input.items.map((item) => ({
+            order_id: order.id,
+            product_id: item.productId,
+            product_name: item.productName,
+            product_slug: item.productSlug,
+            product_image: item.productImage,
+            quantity: item.quantity,
+            unit_price: item.unitPrice,
+            total_price: item.totalPrice,
+          })),
+        );
+        if (itemsError) {
+          await supabaseAdmin.from("orders").delete().eq("id", order.id);
+          throw itemsError;
+        }
+        return order;
       },
-      receipt_email: shippingAddress.email,
-      description: `CutHaven order ${orderNumber}`,
+      createPaymentIntent: async (input) => {
+        const paymentIntent = await stripe.paymentIntents.create({
+          amount: input.amountCents,
+          currency: "usd",
+          metadata: { orderId: input.orderId },
+          receipt_email: input.customerEmail,
+          description: `CutHaven order ${input.orderNumber}`,
+        }, { idempotencyKey: `cuthaven-order-${input.orderId}` });
+        return { id: paymentIntent.id, clientSecret: paymentIntent.client_secret };
+      },
+      linkPaymentIntent: async (orderId, paymentIntentId) => {
+        const { data: linked, error } = await supabaseAdmin
+          .from("orders")
+          .update({ payment_transaction_id: paymentIntentId, updated_at: new Date().toISOString() })
+          .eq("id", orderId)
+          .is("payment_transaction_id", null)
+          .select("id")
+          .maybeSingle();
+        if (error) throw error;
+        if (!linked) throw new Error("Pending order could not be linked to Stripe PaymentIntent");
+      },
+      cancelPaymentIntent: async (paymentIntentId) => {
+        await stripe.paymentIntents.cancel(paymentIntentId);
+      },
+      markOrderFailed: async (orderId) => {
+        await supabaseAdmin
+          .from("orders")
+          .update({ status: "cancelled", payment_status: "failed", updated_at: new Date().toISOString() })
+          .eq("id", orderId)
+          .eq("payment_status", "pending");
+      },
     });
 
-    // Return client_secret and totals to the frontend.
-    // NO DB ORDER IS CREATED HERE — the order is created in /confirm-stripe-order
-    // after the customer successfully completes payment.
+    console.info("[CHECKOUT]", { orderId: checkout.orderId, result: "draft_created" });
     return res.json({
-      clientSecret: paymentIntent.client_secret,
-      paymentIntentId: paymentIntent.id,
+      clientSecret: checkout.paymentIntent.clientSecret,
+      orderId: checkout.orderId,
       orderNumber,
+      confirmationToken,
       subtotal: subtotalCents / 100,
       shippingCost: shippingCents / 100,
       taxAmount: taxCents / 100,
@@ -346,8 +424,6 @@ export async function createPaymentIntent(req: Request, res: Response, next: Nex
       taxRate: taxResult.taxRate,
       discountAmount: discountCents / 100,
       total: totalCents / 100,
-      // Pass back to frontend so it can send to confirm-stripe-order
-      checkoutToken: paymentIntent.id,
     });
   } catch (err) {
     next(err);
@@ -418,19 +494,42 @@ export async function stripeWebhook(req: Request, res: Response, next: NextFunct
 
   try {
     if (event.type === "payment_intent.succeeded") {
-      const pi = event.data.object as { id: string };
+      const pi = event.data.object as { id: string; metadata?: { orderId?: string } };
+      const internalOrderId = pi.metadata?.orderId;
+      if (!internalOrderId || !z.string().uuid().safeParse(internalOrderId).success) {
+        console.error("[WEBHOOK]", { ...eventContext, result: "rejected", reason: "missing_internal_order_id" });
+        return res.status(400).json({ error: "Payment is missing its internal order reference" });
+      }
 
-      // 1. Flip order status to confirmed
-      const { data: updatedOrders } = await supabaseAdmin
+      // Only the first pending -> paid transition performs downstream effects.
+      const { data: updatedOrders, error: updateError } = await supabaseAdmin
         .from("orders")
         .update({
           status: "confirmed",
           payment_status: "paid",
           updated_at: new Date().toISOString(),
         })
+        .eq("id", internalOrderId)
         .eq("payment_transaction_id", pi.id)
+        .eq("payment_status", "pending")
         .select("id, order_number, subtotal, shipping_cost, tax_amount, discount_amount, total, shipping_address, coupon_id")
         .limit(1);
+
+      if (updateError) throw updateError;
+      if (!updatedOrders?.length) {
+        const { data: existingOrder, error: lookupError } = await supabaseAdmin
+          .from("orders")
+          .select("id, payment_status")
+          .eq("id", internalOrderId)
+          .eq("payment_transaction_id", pi.id)
+          .maybeSingle();
+        if (lookupError) throw lookupError;
+        if (existingOrder?.payment_status === "paid") {
+          console.info("[WEBHOOK]", { ...eventContext, orderId: internalOrderId, result: "duplicate" });
+        } else {
+          throw new Error(`No pending order matches Stripe PaymentIntent ${pi.id}`);
+        }
+      }
 
       // 1a. Deduct stock for the order items (webhook backup)
       if (updatedOrders && updatedOrders.length > 0) {
@@ -514,15 +613,18 @@ export async function stripeWebhook(req: Request, res: Response, next: NextFunct
     }
 
     if (event.type === "payment_intent.payment_failed") {
-      const pi = event.data.object as { id: string };
-      await supabaseAdmin
+      const pi = event.data.object as { id: string; metadata?: { orderId?: string } };
+      const { error: failureUpdateError } = await supabaseAdmin
         .from("orders")
         .update({
           status: "cancelled",
           payment_status: "failed",
           updated_at: new Date().toISOString(),
         })
-        .eq("payment_transaction_id", pi.id);
+        .eq("id", pi.metadata?.orderId ?? "")
+        .eq("payment_transaction_id", pi.id)
+        .eq("payment_status", "pending");
+      if (failureUpdateError) throw failureUpdateError;
     }
 
     console.info("[WEBHOOK]", { ...eventContext, result: "processed", httpStatus: 200 });
@@ -562,171 +664,111 @@ function getEstimatedDelivery(): string {
   return `${fmt(earliest)} – ${fmt(latest)}`;
 }
 
+function hashConfirmationToken(token: string): string {
+  return createHash("sha256").update(token).digest("hex");
+}
+
+function tokenMatches(token: string | undefined, expectedHash: string | null): boolean {
+  if (!token || !expectedHash) return false;
+  const actual = Buffer.from(hashConfirmationToken(token), "hex");
+  const expected = Buffer.from(expectedHash, "hex");
+  return actual.length === expected.length && timingSafeEqual(actual, expected);
+}
+
+async function canAccessOrder(
+  req: Request,
+  order: { customer_id: string | null; confirmation_token_hash: string | null },
+  confirmationToken?: string,
+): Promise<boolean> {
+  if (order.customer_id && req.user) {
+    const { data: customer } = await supabaseAdmin
+      .from("customers")
+      .select("id")
+      .eq("auth_id", req.user.id)
+      .eq("id", order.customer_id)
+      .maybeSingle();
+    return Boolean(customer);
+  }
+
+  return !order.customer_id && tokenMatches(confirmationToken, order.confirmation_token_hash);
+}
+
 // ─── GET /api/checkout/order/:id ──────────────────────────────────────────
-// Returns a confirmed order's summary for the confirmation page.
-// Accessible by the customer who placed it OR guests (by orderId only — no auth required
-// since this page is reached immediately after checkout, before account creation).
+// Returns a minimal pending/confirmed summary to the owning customer or a guest
+// presenting the high-entropy token issued with the pending order.
 export async function getOrderSummary(req: Request, res: Response, next: NextFunction) {
   try {
     const { id } = req.params;
+    const confirmationToken = typeof req.query.token === "string" ? req.query.token : undefined;
+    if (!z.string().uuid().safeParse(id).success) {
+      return res.status(400).json({ error: "Invalid order ID" });
+    }
 
     const { data: order, error: orderError } = await supabaseAdmin
       .from("orders")
-      .select("*")
+      .select("id, order_number, customer_id, confirmation_token_hash, status, payment_status, subtotal, shipping_cost, tax_amount, discount_amount, total, shipping_address, created_at")
       .eq("id", id)
       .maybeSingle();
 
     if (orderError) throw orderError;
     if (!order) return res.status(404).json({ error: "Order not found" });
+    if (!(await canAccessOrder(req, order, confirmationToken))) {
+      return res.status(404).json({ error: "Order not found" });
+    }
 
     const { data: items, error: itemsError } = await supabaseAdmin
       .from("order_items")
-      .select("*")
+      .select("id, product_name, product_image, quantity, unit_price, total_price")
       .eq("order_id", id);
 
     if (itemsError) throw itemsError;
 
-    return res.json({ order, items: items ?? [] });
+    const { customer_id: _customerId, confirmation_token_hash: _tokenHash, ...publicOrder } = order;
+    return res.json({ order: publicOrder, items: items ?? [] });
   } catch (err) {
     next(err);
   }
 }
 
 // ─── POST /api/checkout/confirm-stripe-order ──────────────────────────────
-// Called by the FRONTEND after stripe.confirmPayment() succeeds.
-// Creates the DB order only at this point — customer has already paid.
-// The Stripe webhook acts as a backup for cases where the browser closes.
+// Verifies provider state for an already-persisted internal order. The signed
+// webhook remains authoritative for finalization and all commerce side effects.
 export async function confirmStripeOrder(req: Request, res: Response, next: NextFunction) {
   try {
-    const { paymentIntentId } = req.body as { paymentIntentId: string };
-    if (!paymentIntentId) {
-      return res.status(400).json({ error: "paymentIntentId is required" });
-    }
-
-    // Verify the PaymentIntent is actually paid — never trust the frontend claim
-    const stripe = await getStripeInstance();
-    const pi = await stripe.paymentIntents.retrieve(paymentIntentId);
-    if (pi.status !== "succeeded") {
-      return res.status(400).json({ error: "Payment has not been completed" });
-    }
-
-    // Check if order already exists (webhook may have already created it)
-    const { data: existing } = await supabaseAdmin
-      .from("orders")
-      .select("id, order_number")
-      .eq("payment_transaction_id", paymentIntentId)
-      .maybeSingle();
-
-    if (existing) {
-      return res.json({ orderId: existing.id, orderNumber: existing.order_number });
-    }
-
-    // Reconstruct order data from PaymentIntent metadata
-    const meta = pi.metadata;
-    const shippingAddr = JSON.parse(meta.shippingAddress ?? "{}");
-    const lineItems: Array<{
-      productId: string; productName: string; productSlug: string;
-      productImage: string | null; quantity: number; unitPrice: number; totalPrice: number;
-    }> = JSON.parse(meta.lineItems ?? "[]");
-
-    const orderNumber = meta.orderNumber ?? `CUT-${Date.now().toString(36).toUpperCase()}`;
-    const appliedCouponId = meta.appliedCouponId || null;
-
-    let customerId: string | null = null;
-    if (req.user) {
-      const { data: cust } = await supabaseAdmin.from("customers").select("id").eq("auth_id", req.user.id).maybeSingle();
-      customerId = cust?.id ?? null;
-    }
+    const parsed = z.object({
+      orderId: z.string().uuid(),
+      confirmationToken: z.string().min(32).optional(),
+    }).safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ error: "Valid internal orderId is required" });
 
     const { data: order, error: orderError } = await supabaseAdmin
       .from("orders")
-      .insert({
-        order_number: orderNumber,
-        customer_id: customerId,
-        status: "confirmed",
-        payment_status: "paid",
-        subtotal: Number(meta.subtotal) / 100,
-        shipping_cost: Number(meta.shippingCents) / 100,
-        tax_amount: Number(meta.taxCents) / 100,
-        discount_amount: Number(meta.discountCents) / 100,
-        total: Number(meta.totalCents) / 100,
-        shipping_address: shippingAddr,
-        billing_address: shippingAddr,
-        payment_processor: "stripe",
-        payment_transaction_id: paymentIntentId,
-        customer_notes: meta.customerNotes || null,
-        coupon_id: appliedCouponId,
-      })
-      .select("id")
-      .single();
-
+      .select("id, order_number, customer_id, confirmation_token_hash, payment_transaction_id, status, payment_status")
+      .eq("id", parsed.data.orderId)
+      .eq("payment_processor", "stripe")
+      .maybeSingle();
     if (orderError) throw orderError;
-
-    await supabaseAdmin.from("order_items").insert(
-      lineItems.map((i) => ({
-        order_id: order.id,
-        product_id: i.productId,
-        product_name: i.productName,
-        product_slug: i.productSlug,
-        product_image: i.productImage,
-        quantity: i.quantity,
-        unit_price: i.unitPrice,
-        total_price: i.totalPrice,
-      }))
-    );
-
-    // ── Deduct stock for each product ──────────────────────────────────────
-    for (const item of lineItems) {
-      await supabaseAdmin.rpc("decrement_product_stock", {
-        product_id: item.productId,
-        quantity: item.quantity,
-      });
+    if (!order || !(await canAccessOrder(req, order, parsed.data.confirmationToken))) {
+      return res.status(404).json({ error: "Order not found" });
+    }
+    if (!order.payment_transaction_id) {
+      return res.status(409).json({ error: "Order is not linked to a payment" });
     }
 
-    // ── Increment coupon used_count AFTER the order row exists ──────────────
-    // Doing this here (not in createPaymentIntent) ensures the order with
-    // coupon_id is already in the DB when the reuse check fires next time.
-    if (appliedCouponId) {
-      const { error: rpcError } = await supabaseAdmin.rpc("increment_coupon_usage", {
-        coupon_id: appliedCouponId,
-      });
-      if (rpcError && !rpcError.message?.includes("coupon_exhausted")) {
-        console.warn("[CONFIRM] increment_coupon_usage RPC failed — manual fallback:", rpcError.message);
-        const { data: cur } = await supabaseAdmin.from("coupons").select("used_count").eq("id", appliedCouponId).single();
-        if (cur) {
-          await supabaseAdmin.from("coupons").update({ used_count: cur.used_count + 1 }).eq("id", appliedCouponId);
-        }
-      }
+    const stripe = await getStripeInstance();
+    const paymentIntent = await stripe.paymentIntents.retrieve(order.payment_transaction_id);
+    if (paymentIntent.metadata.orderId !== order.id) {
+      return res.status(409).json({ error: "Payment does not match this order" });
+    }
+    if (!new Set(["succeeded", "processing"]).has(paymentIntent.status)) {
+      return res.status(400).json({ error: "Payment has not been completed" });
     }
 
-    // Send confirmation email fire-and-forget
-    void (async () => {
-      try {
-        const emailItems: EmailOrderItem[] = lineItems.map((i) => ({
-          productName: i.productName, productImage: i.productImage,
-          quantity: i.quantity, unitPrice: i.unitPrice, totalPrice: i.totalPrice,
-        }));
-        let couponCode: string | undefined;
-        if (appliedCouponId) {
-          const { data: c } = await supabaseAdmin.from("coupons").select("code").eq("id", appliedCouponId).maybeSingle();
-          couponCode = (c as { code: string } | null)?.code;
-        }
-        await sendOrderConfirmationEmail({
-          to: shippingAddr.email, orderNumber, orderId: order.id,
-          items: emailItems,
-          subtotal: Number(meta.subtotal) / 100, shippingCost: Number(meta.shippingCents) / 100,
-          taxAmount: Number(meta.taxCents) / 100, discountAmount: Number(meta.discountCents) / 100,
-          couponCode, total: Number(meta.totalCents) / 100,
-          shippingAddress: {
-            firstName: shippingAddr.firstName ?? "", lastName: shippingAddr.lastName ?? "",
-            address: shippingAddr.address ?? "", city: shippingAddr.city ?? "",
-            state: shippingAddr.state ?? "", zip: shippingAddr.zip ?? "", country: shippingAddr.country ?? "US",
-          },
-          estimatedDelivery: getEstimatedDelivery(),
-        });
-      } catch (e) { console.error("[CONFIRM] Email error (non-fatal):", e); }
-    })();
-
-    return res.json({ orderId: order.id, orderNumber });
+    return res.json({
+      orderId: order.id,
+      orderNumber: order.order_number,
+      status: order.status,
+      paymentStatus: order.payment_status,
+    });
   } catch (err) { next(err); }
 }

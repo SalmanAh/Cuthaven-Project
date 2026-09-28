@@ -3,6 +3,7 @@
 !README.md
 !DEFECT_REMEDIATION_PLAN.md
 *.sql
+!supabase/migrations/*.sql
 *.sh
 *.csv
 *.pdf

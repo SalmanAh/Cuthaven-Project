@@ -1,13 +1,14 @@
 import { createFileRoute, Link, useSearch } from "@tanstack/react-router";
 import { CheckCircle2, Package } from "lucide-react";
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { z } from "zod";
 import { getOrderSummary } from "@/lib/api-client";
 import { useCart } from "@/context/CartContext";
 
 const searchSchema = z.object({
-  orderId: z.string().optional(),
+  orderId: z.string().uuid().optional(),
+  token: z.string().min(32).optional(),
 });
 
 export const Route = createFileRoute("/order-confirmation")({
@@ -19,29 +20,52 @@ export const Route = createFileRoute("/order-confirmation")({
 });
 
 function OrderConfirmationPage() {
-  const { orderId } = useSearch({ from: "/order-confirmation" });
+  const { orderId, token } = useSearch({ from: "/order-confirmation" });
   const { clear } = useCart();
-
-  // Clear the cart once — on mount after successful payment
-  useEffect(() => {
-    clear();
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  const pollDeadline = useRef(Date.now() + 60_000);
+  const cartCleared = useRef(false);
 
   const { data, isLoading, isError } = useQuery({
-    queryKey: ["order-summary", orderId],
-    queryFn: () => getOrderSummary(orderId!),
+    queryKey: ["order-summary", orderId, token],
+    queryFn: () => getOrderSummary(orderId!, token),
     enabled: !!orderId,
+    refetchInterval: (query) => {
+      const current = query.state.data;
+      const complete =
+        current?.order.status === "confirmed" && current.order.payment_status === "paid";
+      return !complete && Date.now() < pollDeadline.current ? 2_000 : false;
+    },
   });
 
-  // No orderId in URL — generic confirmation (shouldn't normally happen)
-  if (!orderId) return <GenericConfirmation />;
+  const isConfirmed = data?.order.status === "confirmed" && data.order.payment_status === "paid";
+  useEffect(() => {
+    if (isConfirmed && !cartCleared.current) {
+      cartCleared.current = true;
+      clear();
+    }
+  }, [clear, isConfirmed]);
+
+  if (!orderId) return <ConfirmationUnavailable />;
   if (isLoading)
     return (
       <div className="mx-auto max-w-2xl px-4 py-20 text-center text-text-secondary">
         Loading order…
       </div>
     );
-  if (isError || !data) return <GenericConfirmation />;
+  if (isError || !data) return <ConfirmationUnavailable />;
+
+  if (!isConfirmed) {
+    return (
+      <div className="mx-auto max-w-2xl px-4 py-20 text-center">
+        <h1 className="font-display text-3xl font-bold">Confirming your payment…</h1>
+        <p className="text-text-secondary mt-3">
+          Your order is safely recorded. Please keep this page open while payment confirmation
+          arrives.
+        </p>
+        <p className="font-mono text-sm mt-4">Order {data.order.order_number}</p>
+      </div>
+    );
+  }
 
   const { order, items } = data;
   const addr = order.shipping_address;
@@ -137,15 +161,16 @@ function OrderConfirmationPage() {
   );
 }
 
-function GenericConfirmation() {
+function ConfirmationUnavailable() {
   return (
     <div className="mx-auto max-w-2xl px-4 py-16 text-center">
       <div className="h-20 w-20 rounded-full bg-success/10 grid place-items-center mx-auto mb-6">
         <CheckCircle2 className="h-10 w-10 text-success" />
       </div>
-      <h1 className="font-display text-3xl font-bold">Order Received!</h1>
+      <h1 className="font-display text-3xl font-bold">Confirmation unavailable</h1>
       <p className="text-text-secondary mt-3 max-w-md mx-auto">
-        Thank you for your purchase. You'll receive a confirmation email shortly.
+        We could not verify this order link. Your cart has not been cleared; please retry or contact
+        support.
       </p>
       <div className="mt-8 flex flex-wrap gap-3 justify-center">
         <Link to="/shop" className="btn-primary">

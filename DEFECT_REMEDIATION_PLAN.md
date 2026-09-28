@@ -3,7 +3,7 @@
 **Purpose:** Detailed implementation and tracking plan for confirmed defects and release risks  
 **Code review baseline:** `main` at `bcd5df5`  
 **Created:** 2026-09-28  
-**Last updated:** 2026-09-28  
+**Last updated:** 2026-09-29
 **Current release decision:** **BLOCKED for live payments and production customer data**  
 **Primary project reference:** [README.md](README.md)
 
@@ -49,7 +49,7 @@ A defect becomes `VERIFIED` only when all of the following are true:
 | ID | Priority | Status | Defect | Release gate |
 |---|---|---|---|---|
 | CH-001 | P0 | CODE COMPLETE | Stripe webhook loses the raw body before signature verification | Payments |
-| CH-002 | P0 | CONFIRMED | Stripe can succeed without a database order; redirect fallback is invalid | Payments |
+| CH-002 | P0 | CODE COMPLETE | Stripe can succeed without a database order; redirect fallback is invalid | Payments |
 | CH-003 | P0 | CONFIRMED | Order finalization, stock, coupon, history, and email are not atomic/idempotent | Payments |
 | CH-004 | P0 | CONFIRMED | PayPal capture trusts browser-returned order data and omits stock deduction | Payments |
 | CH-005 | P0 | CONFIRMED | Customer-support routes do not enforce customer/guest ownership | Privacy |
@@ -235,7 +235,7 @@ Do not fix CH-002 or CH-004 by adding more browser retries. Complete the pending
 ## CH-001 — Stripe webhook raw body is parsed incorrectly
 
 **Priority:** P0  
-**Status:** CODE COMPLETE  
+**Status:** CODE COMPLETE
 **Dependencies:** Test harness from CH-011  
 **Affected paths:** `backend/src/app.ts`, `backend/src/index.ts`, `backend/src/routes/checkout.routes.ts`, `backend/src/controllers/checkout.controller.ts`, `backend/src/middleware/errorHandler.ts`, `backend/test/webhook-body.test.mjs`, `backend/package.json`
 
@@ -307,11 +307,11 @@ Revert route mounting only if no live endpoint is receiving traffic. If producti
 ## CH-002 — Paid Stripe transaction can exist without an order
 
 **Priority:** P0  
-**Status:** CONFIRMED  
+**Status:** CODE COMPLETE
 **Dependencies:** CH-001, CH-003, CH-010  
-**Affected paths:** checkout controller/routes, checkout frontend/API client, order confirmation page, database schema
+**Affected paths:** `backend/src/controllers/checkout.controller.ts`, `backend/src/routes/checkout.routes.ts`, `backend/src/services/stripeCheckout.service.ts`, `backend/test/stripe-checkout-ordering.test.mjs`, `frontend/src/lib/api-client.ts`, `frontend/src/routes/checkout.tsx`, `frontend/src/routes/order-confirmation.tsx`, `supabase/migrations/202609280001_ch002_pending_stripe_orders.sql`, `.gitignore`
 
-### Evidence
+### Original defect evidence
 
 - `createPaymentIntent()` creates no order and stores the draft in provider metadata.
 - `confirmStripeOrder()` creates the order only after the browser reports success.
@@ -320,6 +320,17 @@ Revert route mounting only if no live endpoint is receiving traffic. If producti
 - `frontend/src/routes/order-confirmation.tsx` expects a database order ID, so that fallback cannot retrieve an order.
 - `return_url` uses `piid`, but the confirmation route validates only `orderId`; redirect-based payment methods can land on the generic page.
 - The confirmation page clears the cart on mount even when no confirmed order was loaded.
+
+### Implementation evidence — 2026-09-29
+
+- The backend persists a complete pending Supabase order and item snapshots before creating or exposing a Stripe PaymentIntent.
+- Stripe metadata now contains only `orderId`; customer, address, totals, coupon, and line-item drafts are no longer stored in provider metadata.
+- PaymentIntent creation uses the Supabase order ID as its Stripe idempotency key; a link failure cancels the unexposed intent and marks the draft failed.
+- Signed webhooks require both the internal order ID and provider transaction ID, transition only pending payments, acknowledge true duplicates, and fail unmatched events so Stripe retries.
+- Browser confirmation accepts only an internal UUID and verifies the provider ID read from the database; it no longer creates an order from Stripe metadata.
+- Guest order reads require a 32-byte opaque token whose SHA-256 hash is stored in Supabase; authenticated reads require customer ownership.
+- Redirects and fallback navigation use the internal order ID. The confirmation page polls for at most 60 seconds and clears the cart only after `confirmed` plus `paid` is returned.
+- The migration adds the token-hash column, unique provider-transaction mapping, and pending-order lookup index. **Apply it before deploying this code.**
 
 ### Impact
 
@@ -368,17 +379,19 @@ Add or confirm:
 - [ ] Browser confirmation arrives before webhook; later webhook is a no-op success.
 - [ ] Webhook arrives before browser confirmation; browser receives existing result.
 - [ ] Redirect payment returns through `return_url` and loads correct pending/confirmed order.
-- [ ] Database insert fails before PaymentIntent is exposed; customer cannot pay that attempt.
+- [x] Database insert fails before PaymentIntent is exposed; automated test proves Stripe is not called.
 - [ ] Database temporarily fails after provider success; reconciliation finalizes later.
 - [ ] Payment failure releases reservation and retains cart.
 
 ### Acceptance criteria
 
 - [ ] Every successful staging PaymentIntent maps to exactly one order.
-- [ ] No confirmation request accepts a provider ID as an order identifier.
+- [x] No confirmation request accepts a provider ID as an order identifier; request validation requires an internal UUID.
 - [ ] Closing the browser cannot create a paid-but-missing order.
-- [ ] Cart clearing occurs only after a verified confirmed order response.
+- [x] Cart clearing occurs only after a verified `confirmed` and `paid` order response.
 - [ ] Staff can query unresolved payment attempts and reconciliation results.
+
+Local verification evidence (2026-09-29): backend build and typecheck passed; 10/10 backend tests passed, including draft-before-intent and failure cleanup; frontend production build passed; targeted lint for all three modified frontend files passed with zero errors; `git diff --check` passed. Supabase migration application and Stripe staging scenarios remain pending.
 
 ## CH-003 — Finalization and commerce side effects are not atomic or idempotent
 
@@ -1109,6 +1122,7 @@ Add concise evidence entries here; do not duplicate implementation detail alread
 |---|---|---|---|
 | 2026-09-28 | CH-001–CH-014 | -> CONFIRMED | Repository inspection, backend typecheck pass, frontend build pass, lint baseline recorded |
 | 2026-09-28 | CH-001 | CONFIRMED -> CODE COMPLETE | Raw route moved before JSON parser; 7/7 signature/middleware tests, build, and typecheck passed; staging acceptance pending |
+| 2026-09-29 | CH-002 | CONFIRMED -> CODE COMPLETE | Supabase-first pending order, internal-ID redirects, protected polling, 10/10 backend tests, targeted frontend lint and production build passed; migration/staging pending |
 
 ## 12. Sign-off
 
