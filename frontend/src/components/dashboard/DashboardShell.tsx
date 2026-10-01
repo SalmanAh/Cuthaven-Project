@@ -90,7 +90,8 @@ export function DashboardShell({
                 <button
                   key={n.key}
                   onClick={() => {
-                    n.onClick ? n.onClick() : onSelect(n.key);
+                    if (n.onClick) n.onClick();
+                    else onSelect(n.key);
                     setMobileOpen(false);
                   }}
                   className={`w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm text-left ${activeKey === n.key ? "bg-primary text-primary-foreground" : "hover:bg-muted"}`}

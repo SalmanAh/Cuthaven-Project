@@ -1,38 +1,24 @@
 import { Router } from "express";
 import * as queriesController from "../controllers/queries.controller.js";
+import { optionalAuth } from "../middleware/requireAuth.js";
+import {
+  conversationCreateLimiter,
+  conversationMessageLimiter,
+} from "../middleware/rateLimiter.js";
 
 export const queriesRouter = Router();
 
-// ─── Public Customer Queries Routes ────────────────────────────────────────
-// These endpoints are accessible without authentication (for guest users)
-// RLS policies handle security at the database level
-
-// Get or create conversation
+queriesRouter.use(optionalAuth);
 queriesRouter.post(
-  "/conversations",
-  queriesController.getOrCreateConversation
+  "/conversation",
+  conversationCreateLimiter,
+  queriesController.getOrCreateConversation,
 );
-
-// Get messages for a conversation
-queriesRouter.get(
-  "/conversations/:id/messages",
-  queriesController.getMessages
-);
-
-// Send customer message
+queriesRouter.get("/conversation/messages", queriesController.getMessages);
 queriesRouter.post(
-  "/conversations/:id/messages",
-  queriesController.sendCustomerMessage
+  "/conversation/messages",
+  conversationMessageLimiter,
+  queriesController.sendCustomerMessage,
 );
-
-// Get unread count (fallback - WebSocket is primary)
-queriesRouter.get(
-  "/unread-count",
-  queriesController.getUnreadCount
-);
-
-// Mark conversation as read (customer)
-queriesRouter.patch(
-  "/conversations/:id/read",
-  queriesController.markAsReadByCustomer
-);
+queriesRouter.get("/conversation/unread-count", queriesController.getUnreadCount);
+queriesRouter.patch("/conversation/read", queriesController.markAsReadByCustomer);

@@ -26,7 +26,7 @@ export const supabaseAdmin = createClient(env.SUPABASE_URL, env.SUPABASE_SERVICE
 // Never used for DB queries — it only has anon-level access.
 // Keeping this separate ensures supabaseAdmin's service-role context is never
 // polluted by a user session.
-export const supabaseAuth = createClient(env.SUPABASE_URL, env.SUPABASE_SERVICE_ROLE_KEY, {
+export const supabaseAuth = createClient(env.SUPABASE_URL, env.SUPABASE_ANON_KEY, {
   auth: {
     persistSession: false,
     autoRefreshToken: false,

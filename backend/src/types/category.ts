@@ -1,4 +1,4 @@
-// Mirrors the categories table in cuthaven_db_schema.sql
+// Mirrors the categories table in the versioned Supabase migrations.
 
 export interface Category {
   id: string;

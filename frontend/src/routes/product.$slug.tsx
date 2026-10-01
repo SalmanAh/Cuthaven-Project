@@ -28,6 +28,7 @@ import {
 import { useCart } from "@/context/CartContext";
 import { useWishlist } from "@/context/WishlistContext";
 import { useAuth } from "@/context/AuthContext";
+import { errorMessage } from "@/lib/utils";
 import { toast } from "sonner";
 import type { Product } from "@/data/products";
 
@@ -544,11 +545,9 @@ function ReviewsTab({ productSlug, productId }: { productSlug: string; productId
       setDisclosed(false);
       setEligibility(null);
       refetch();
-    } catch (err: any) {
-      const msg =
-        typeof err.message === "string" && err.message.includes("{")
-          ? "Please check your review and try again."
-          : (err.message ?? "Failed to submit review");
+    } catch (err: unknown) {
+      const detail = errorMessage(err, "Failed to submit review");
+      const msg = detail.includes("{") ? "Please check your review and try again." : detail;
       toast.error(msg);
     } finally {
       setSubmitting(false);

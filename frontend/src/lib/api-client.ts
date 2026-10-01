@@ -1,10 +1,9 @@
 import type { Product } from "@/data/products";
+import { getAccessToken } from "@/lib/auth-session";
 
 // The ONLY place the frontend knows about the backend's existence.
 // No Supabase client here — just plain HTTP to the separately-running Express service.
 const API_URL = import.meta.env.VITE_API_URL ?? "http://localhost:4000/api";
-
-const TOKEN_KEY = "ch-access-token";
 
 // ─── Core request helper ───────────────────────────────────────────────────
 
@@ -12,16 +11,17 @@ interface RequestOptions {
   method?: "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
   body?: unknown;
   auth?: boolean; // when true, attaches the stored Bearer token
+  headers?: Record<string, string>;
 }
 
 async function request<T>(path: string, options: RequestOptions = {}): Promise<T> {
   const { method = "GET", body, auth = false } = options;
 
-  const headers: Record<string, string> = {};
+  const headers: Record<string, string> = { ...options.headers };
   if (body) headers["Content-Type"] = "application/json";
 
   if (auth) {
-    const token = typeof window !== "undefined" ? localStorage.getItem(TOKEN_KEY) : null;
+    const token = getAccessToken();
     if (token) headers["Authorization"] = `Bearer ${token}`;
   }
 
@@ -352,8 +352,6 @@ export interface OrderSummary {
     shipping_cost: number;
     tax_amount: number;
     total: number;
-    shipping_address: Record<string, string>;
-    created_at: string;
   };
   items: Array<{
     id: string;
@@ -369,8 +367,10 @@ export async function getOrderSummary(
   orderId: string,
   confirmationToken?: string,
 ): Promise<OrderSummary> {
-  const query = confirmationToken ? `?token=${encodeURIComponent(confirmationToken)}` : "";
-  return request<OrderSummary>(`/checkout/order/${orderId}${query}`, { auth: true });
+  return request<OrderSummary>(`/checkout/order/${orderId}`, {
+    auth: true,
+    headers: confirmationToken ? { "X-Order-Confirmation-Token": confirmationToken } : undefined,
+  });
 }
 
 // ─── Admin types ───────────────────────────────────────────────────────────
@@ -441,6 +441,23 @@ export interface AdminProduct {
   createdAt: string;
   updatedAt: string;
 }
+
+export type AdminProductInput = Pick<
+  AdminProduct,
+  | "name"
+  | "slug"
+  | "description"
+  | "price"
+  | "primaryImageUrl"
+  | "imageUrls"
+  | "stockQuantity"
+  | "isActive"
+  | "compareAtPrice"
+  | "sku"
+  | "brand"
+  | "categoryId"
+  | "availability"
+>;
 
 export interface AdminCustomer {
   id: string;
@@ -545,14 +562,14 @@ export async function adminGetProducts(params?: {
 }
 
 export async function adminCreateProduct(
-  data: Omit<AdminProduct, "id" | "createdAt" | "updatedAt" | "categoryName">,
+  data: AdminProductInput,
 ): Promise<{ product: AdminProduct }> {
   return request("/admin/products", { method: "POST", body: data, auth: true });
 }
 
 export async function adminUpdateProduct(
   id: string,
-  data: Partial<Omit<AdminProduct, "id" | "createdAt" | "updatedAt" | "categoryName">>,
+  data: Partial<AdminProductInput>,
 ): Promise<{ product: AdminProduct }> {
   return request(`/admin/products/${id}`, { method: "PUT", body: data, auth: true });
 }
@@ -784,32 +801,14 @@ export async function logConsent(data: {
 
 export interface PayPalOrderResponse {
   paypalOrderId: string;
+  orderId: string;
   orderNumber: string;
+  confirmationToken: string | null;
   subtotal: number;
   shippingCost: number;
   taxAmount: number;
   discountAmount: number;
   total: number;
-  _checkoutData: {
-    orderNumber: string;
-    appliedCouponId: string | null;
-    subtotalCents: number;
-    shippingCents: number;
-    taxCents: number;
-    discountCents: number;
-    totalCents: number;
-    shippingAddress: Record<string, string>;
-    customerNotes: string | null;
-    lineItems: Array<{
-      productId: string;
-      productName: string;
-      productSlug: string;
-      productImage: string | null;
-      quantity: number;
-      unitPrice: number;
-      totalPrice: number;
-    }>;
-  };
 }
 
 export async function createPayPalOrder(
@@ -826,8 +825,9 @@ export async function createPayPalOrder(
 }
 
 export async function capturePayPalOrder(
+  orderId: string,
   paypalOrderId: string,
-  checkoutData: PayPalOrderResponse["_checkoutData"],
+  confirmationToken: string | null,
 ): Promise<{
   success: boolean;
   orderId: string;
@@ -836,7 +836,7 @@ export async function capturePayPalOrder(
 }> {
   return request("/checkout/paypal/capture-order", {
     method: "POST",
-    body: { paypalOrderId, checkoutData },
+    body: { orderId, paypalOrderId, confirmationToken },
     auth: true,
   });
 }
@@ -909,25 +909,6 @@ export interface PaymentGateway {
   updatedAt: string;
 }
 
-export interface PaymentGatewayFull {
-  id: string;
-  gatewayType: GatewayType;
-  accountName: string;
-  isActive: boolean;
-
-  // Full unmasked keys (for edit form)
-  stripeSecretKey?: string;
-  stripePublishableKey?: string;
-  stripeWebhookSecret?: string;
-
-  paypalClientId?: string;
-  paypalClientSecret?: string;
-  paypalMode?: PayPalMode;
-
-  createdAt: string;
-  updatedAt: string;
-}
-
 export interface CreateStripeGateway {
   gatewayType: "stripe";
   accountName: string;
@@ -952,8 +933,8 @@ export async function adminGetPaymentGateways(): Promise<PaymentGateway[]> {
   return request<PaymentGateway[]>("/admin/payment-gateways", { auth: true });
 }
 
-export async function adminGetPaymentGateway(id: string): Promise<PaymentGatewayFull> {
-  return request<PaymentGatewayFull>(`/admin/payment-gateways/${id}`, { auth: true });
+export async function adminGetPaymentGateway(id: string): Promise<PaymentGateway> {
+  return request<PaymentGateway>(`/admin/payment-gateways/${id}`, { auth: true });
 }
 
 export async function adminCreatePaymentGateway(

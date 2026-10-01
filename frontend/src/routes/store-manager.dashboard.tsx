@@ -27,6 +27,7 @@ import {
   type AdminRevenueSeries,
   type AdminPeriod,
 } from "@/lib/api-client";
+import { errorMessage } from "@/lib/utils";
 
 type Tab = "overview" | "orders" | "products";
 
@@ -103,8 +104,8 @@ function SMOverview() {
       setStats(sumRes.stats);
       setSeries(serRes.series);
       setOrders(ordRes.orders);
-    } catch (e: any) {
-      toast.error(e.message ?? "Failed to load overview");
+    } catch (e: unknown) {
+      toast.error(errorMessage(e, "Failed to load overview"));
     } finally {
       setLoading(false);
     }
@@ -162,7 +163,7 @@ function SMOverview() {
                   <td className="py-2.5 pr-3">{o.customerName ?? o.customerEmail ?? "Guest"}</td>
                   <td className="py-2.5 pr-3">{o.createdAt.slice(0, 10)}</td>
                   <td className="py-2.5 pr-3">
-                    <StatusBadge status={o.status as any} />
+                    <StatusBadge status={o.status} />
                   </td>
                 </tr>
               ))}
@@ -192,8 +193,8 @@ function SMOrders() {
       });
       setOrders(res.orders);
       setTotal(res.total);
-    } catch (e: any) {
-      toast.error(e.message);
+    } catch (e: unknown) {
+      toast.error(errorMessage(e, "Failed to load orders"));
     } finally {
       setLoading(false);
     }
@@ -209,8 +210,8 @@ function SMOrders() {
       setOrders((prev) => prev.map((o) => (o.id === id ? { ...o, status } : o)));
       if (detail?.id === id) setDetail((d) => (d ? { ...d, status } : d));
       toast.success(`Status → ${status}`);
-    } catch (e: any) {
-      toast.error(e.message);
+    } catch (e: unknown) {
+      toast.error(errorMessage(e, "Failed to update order status"));
     }
   };
 
@@ -273,7 +274,7 @@ function SMOrders() {
                     <td className="py-3 pr-3">{o.customerName ?? o.customerEmail ?? "Guest"}</td>
                     <td className="py-3 pr-3">{o.createdAt.slice(0, 10)}</td>
                     <td className="py-3 pr-3">
-                      <StatusBadge status={o.status as any} />
+                      <StatusBadge status={o.status} />
                     </td>
                     <td className="py-3 pr-3 font-semibold">${o.total.toFixed(2)}</td>
                     <td className="py-3">
@@ -321,7 +322,7 @@ function SMOrders() {
               <div className="space-y-4 text-sm">
                 <div className="flex justify-between items-center">
                   <span>{detail.customerName ?? detail.customerEmail ?? "Guest"}</span>
-                  <StatusBadge status={detail.status as any} />
+                  <StatusBadge status={detail.status} />
                 </div>
                 <div className="space-y-2">
                   {detail.items.map((it) => (

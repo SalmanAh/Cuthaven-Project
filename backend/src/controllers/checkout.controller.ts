@@ -1,10 +1,17 @@
 import type { Request, Response, NextFunction } from "express";
-import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
+import type Stripe from "stripe";
+import { randomBytes } from "node:crypto";
 import { z } from "zod";
-import { getStripeInstance, getStripeWebhookConfig } from "../config/stripe.js";
+import { getStripeGateway, getStripeInstance, getStripeWebhookConfigs } from "../config/stripe.js";
 import { supabaseAdmin } from "../config/supabase.js";
 import { calculateTax } from "../lib/calculateTax.js";
 import { createPendingStripeCheckout } from "../services/stripeCheckout.service.js";
+import {
+  canAccessOrder,
+  hashConfirmationToken,
+  tokenMatches,
+  toConfirmationOrder,
+} from "../services/orderConfirmation.service.js";
 import {
   dispatchCheckoutOutbox,
   finalizePaidOrder,
@@ -21,7 +28,7 @@ const cartItemSchema = z.object({
 const shippingAddressSchema = z.object({
   firstName: z.string().min(1),
   lastName: z.string().min(1),
-  email: z.string().email(),
+  email: z.string().trim().email().transform((email) => email.toLowerCase()),
   phone: z.string().optional().default(""),
   address: z.string().min(1),
   city: z.string().min(1),
@@ -115,7 +122,7 @@ export async function validateCoupon(req: Request, res: Response, next: NextFunc
           .select("id", { count: "exact", head: true })
           .eq("customer_id", customerRow.id)
           .eq("coupon_id", c.id)
-          .in("status", ["confirmed", "processing", "shipped", "delivered"]);
+          .or("reservation_status.in.(reserved,committed),status.in.(confirmed,processing,shipped,delivered)");
 
         if ((count ?? 0) > 0) {
           return res.status(400).json({ error: "You have already used this coupon" });
@@ -128,7 +135,7 @@ export async function validateCoupon(req: Request, res: Response, next: NextFunc
         .from("orders")
         .select("id", { count: "exact", head: true })
         .eq("coupon_id", c.id)
-        .in("status", ["confirmed", "processing", "shipped", "delivered"])
+        .or("reservation_status.in.(reserved,committed),status.in.(confirmed,processing,shipped,delivered)")
         .filter("shipping_address->>email", "eq", checkEmail);
 
       if ((emailCount ?? 0) > 0) {
@@ -205,9 +212,8 @@ export async function createPaymentIntent(req: Request, res: Response, next: Nex
 
     const shippingCents = subtotalCents >= FREE_SHIPPING_THRESHOLD ? 0 : 999;
 
-    // ── 2a. Calculate real US sales tax via TaxJar ──────────────────────────
-    // calculateTax() gracefully returns $0 if TAXJAR_API_KEY is absent or TaxJar
-    // is unreachable — checkout never fails due to a tax service outage.
+    // ── 2a. Apply the store's current tax policy ─────────────────────────────
+    // The configured policy currently returns zero tax for every order.
     const taxResult = await calculateTax(
       {
         zip:    shippingAddress.zip,
@@ -255,7 +261,7 @@ export async function createPaymentIntent(req: Request, res: Response, next: Nex
               .select("id", { count: "exact", head: true })
               .eq("customer_id", customerRow.id)
               .eq("coupon_id", c.id)
-              .in("status", ["confirmed", "processing", "shipped", "delivered"]);
+              .or("reservation_status.in.(reserved,committed),status.in.(confirmed,processing,shipped,delivered)");
             alreadyUsed = (count ?? 0) > 0;
           }
         } else if (shippingAddress.email) {
@@ -264,7 +270,7 @@ export async function createPaymentIntent(req: Request, res: Response, next: Nex
             .from("orders")
             .select("id", { count: "exact", head: true })
             .eq("coupon_id", c.id)
-            .in("status", ["confirmed", "processing", "shipped", "delivered"])
+            .or("reservation_status.in.(reserved,committed),status.in.(confirmed,processing,shipped,delivered)")
             .filter("shipping_address->>email", "eq", shippingAddress.email.toLowerCase().trim());
           alreadyUsed = (emailCount ?? 0) > 0;
         }
@@ -321,7 +327,7 @@ export async function createPaymentIntent(req: Request, res: Response, next: Nex
     }));
 
     // ── 4. Persist the complete pending order before creating Stripe intent ─
-    const stripe = await getStripeInstance();
+    const { gatewayId, stripe } = await getStripeGateway();
     const checkout = await createPendingStripeCheckout({
       orderNumber,
       customerId,
@@ -351,6 +357,7 @@ export async function createPaymentIntent(req: Request, res: Response, next: Nex
             customer_notes: input.customerNotes,
             coupon_id: input.couponId,
             confirmation_token_hash: input.confirmationTokenHash,
+            payment_gateway_id: gatewayId,
           },
           p_items: input.items.map((item) => ({
             product_id: item.productId,
@@ -435,10 +442,9 @@ export async function stripeWebhook(req: Request, res: Response, next: NextFunct
     return res.status(400).json({ error: "Invalid webhook request" });
   }
 
-  // Fetch the webhook verification configuration for the active Stripe gateway.
-  let webhookConfig: { gatewayId: string; secret: string };
+  let webhookConfigs;
   try {
-    webhookConfig = await getStripeWebhookConfig();
+    webhookConfigs = await getStripeWebhookConfigs();
   } catch (err) {
     console.error("[WEBHOOK]", {
       result: "configuration_error",
@@ -448,34 +454,30 @@ export async function stripeWebhook(req: Request, res: Response, next: NextFunct
     return res.status(500).json({ error: "Webhook configuration error" });
   }
 
-  let event;
-  if (webhookConfig.secret) {
+  let event: Stripe.Event | null = null;
+  let gatewayId: string | null = null;
+  for (const config of webhookConfigs) {
     try {
-      const stripe = await getStripeInstance();
-      event = stripe.webhooks.constructEvent(req.body, sig, webhookConfig.secret);
+      event = config.stripe.webhooks.constructEvent(req.body, sig, config.webhookSecret!);
+      gatewayId = config.gatewayId;
+      break;
     } catch {
-      console.warn("[WEBHOOK]", {
-        gatewayId: webhookConfig.gatewayId,
-        result: "rejected",
-        reason: "signature_verification_failed",
-        httpStatus: 400,
-      });
-      return res.status(400).json({ error: "Webhook signature verification failed" });
+      // Try the next configured account; delayed events can arrive after rotation.
     }
-  } else {
-    console.error("[WEBHOOK]", {
-      gatewayId: webhookConfig.gatewayId,
-      result: "configuration_error",
-      reason: "missing_webhook_secret",
+  }
+  if (!event || !gatewayId) {
+    console.warn("[WEBHOOK]", {
+      result: "rejected",
+      reason: "signature_verification_failed",
       httpStatus: 400,
     });
-    return res.status(400).json({ error: "Webhook not configured" });
+    return res.status(400).json({ error: "Webhook signature verification failed" });
   }
 
   const eventContext = {
     eventId: event.id,
     eventType: event.type,
-    gatewayId: webhookConfig.gatewayId,
+    gatewayId,
   };
   console.info("[WEBHOOK]", { ...eventContext, result: "verified" });
 
@@ -487,6 +489,15 @@ export async function stripeWebhook(req: Request, res: Response, next: NextFunct
         console.error("[WEBHOOK]", { ...eventContext, result: "rejected", reason: "missing_internal_order_id" });
         return res.status(400).json({ error: "Payment is missing its internal order reference" });
       }
+
+      const { data: boundOrder, error: bindingError } = await supabaseAdmin
+        .from("orders")
+        .select("id")
+        .eq("id", internalOrderId)
+        .eq("payment_gateway_id", gatewayId)
+        .maybeSingle();
+      if (bindingError) throw bindingError;
+      if (!boundOrder) return res.status(409).json({ error: "Payment gateway does not match this order" });
 
       const startedAt = Date.now();
       const outcome = await finalizePaidOrder({
@@ -522,20 +533,13 @@ export async function stripeWebhook(req: Request, res: Response, next: NextFunct
     }
 
     if (event.type === "payment_intent.payment_failed") {
-      const pi = event.data.object as { id: string; metadata?: { orderId?: string } };
-      const internalOrderId = pi.metadata?.orderId;
-      if (internalOrderId && z.string().uuid().safeParse(internalOrderId).success) {
-        const outcome = await releaseCheckoutReservation(internalOrderId, "Stripe payment failed", {
-          provider: "stripe",
-          transactionId: pi.id,
-        });
-        console.info("[RESERVATION]", {
-          orderId: internalOrderId,
-          provider: "stripe",
-          providerEventId: event.id,
-          result: outcome,
-        });
-      }
+      const pi = event.data.object as { metadata?: { orderId?: string } };
+      console.info("[RESERVATION]", {
+        orderId: pi.metadata?.orderId,
+        provider: "stripe",
+        providerEventId: event.id,
+        result: "retryable_failure_retained",
+      });
     }
 
     console.info("[WEBHOOK]", { ...eventContext, result: "processed", httpStatus: 200 });
@@ -552,33 +556,25 @@ export async function stripeWebhook(req: Request, res: Response, next: NextFunct
 
 // ─── Helpers ───────────────────────────────────────────────────────────────
 
-function hashConfirmationToken(token: string): string {
-  return createHash("sha256").update(token).digest("hex");
-}
-
-function tokenMatches(token: string | undefined, expectedHash: string | null): boolean {
-  if (!token || !expectedHash) return false;
-  const actual = Buffer.from(hashConfirmationToken(token), "hex");
-  const expected = Buffer.from(expectedHash, "hex");
-  return actual.length === expected.length && timingSafeEqual(actual, expected);
-}
-
-async function canAccessOrder(
+async function requestCanAccessOrder(
   req: Request,
   order: { customer_id: string | null; confirmation_token_hash: string | null },
   confirmationToken?: string,
 ): Promise<boolean> {
-  if (order.customer_id && req.user) {
+  return canAccessOrder({
+    authId: req.user?.id,
+    customerId: order.customer_id,
+    confirmationToken,
+    confirmationTokenHash: order.confirmation_token_hash,
+  }, async (authId, customerId) => {
     const { data: customer } = await supabaseAdmin
       .from("customers")
       .select("id")
-      .eq("auth_id", req.user.id)
-      .eq("id", order.customer_id)
+      .eq("auth_id", authId)
+      .eq("id", customerId)
       .maybeSingle();
     return Boolean(customer);
-  }
-
-  return !order.customer_id && tokenMatches(confirmationToken, order.confirmation_token_hash);
+  });
 }
 
 // ─── GET /api/checkout/order/:id ──────────────────────────────────────────
@@ -586,21 +582,23 @@ async function canAccessOrder(
 // presenting the high-entropy token issued with the pending order.
 export async function getOrderSummary(req: Request, res: Response, next: NextFunction) {
   try {
+    res.set("Cache-Control", "private, no-store");
+    res.set("Pragma", "no-cache");
     const { id } = req.params;
-    const confirmationToken = typeof req.query.token === "string" ? req.query.token : undefined;
+    const confirmationToken = req.header("X-Order-Confirmation-Token");
     if (!z.string().uuid().safeParse(id).success) {
       return res.status(400).json({ error: "Invalid order ID" });
     }
 
     const { data: order, error: orderError } = await supabaseAdmin
       .from("orders")
-      .select("id, order_number, customer_id, confirmation_token_hash, status, payment_status, subtotal, shipping_cost, tax_amount, discount_amount, total, shipping_address, created_at")
+      .select("id, order_number, customer_id, confirmation_token_hash, status, payment_status, subtotal, shipping_cost, tax_amount, total")
       .eq("id", id)
       .maybeSingle();
 
     if (orderError) throw orderError;
     if (!order) return res.status(404).json({ error: "Order not found" });
-    if (!(await canAccessOrder(req, order, confirmationToken))) {
+    if (!(await requestCanAccessOrder(req, order, confirmationToken))) {
       return res.status(404).json({ error: "Order not found" });
     }
 
@@ -611,8 +609,7 @@ export async function getOrderSummary(req: Request, res: Response, next: NextFun
 
     if (itemsError) throw itemsError;
 
-    const { customer_id: _customerId, confirmation_token_hash: _tokenHash, ...publicOrder } = order;
-    return res.json({ order: publicOrder, items: items ?? [] });
+    return res.json({ order: toConfirmationOrder(order), items: items ?? [] });
   } catch (err) {
     next(err);
   }
@@ -631,19 +628,22 @@ export async function confirmStripeOrder(req: Request, res: Response, next: Next
 
     const { data: order, error: orderError } = await supabaseAdmin
       .from("orders")
-      .select("id, order_number, customer_id, confirmation_token_hash, payment_transaction_id, status, payment_status")
+      .select("id, order_number, customer_id, confirmation_token_hash, payment_transaction_id, payment_gateway_id, status, payment_status")
       .eq("id", parsed.data.orderId)
       .eq("payment_processor", "stripe")
       .maybeSingle();
     if (orderError) throw orderError;
-    if (!order || !(await canAccessOrder(req, order, parsed.data.confirmationToken))) {
+    if (!order || !(await requestCanAccessOrder(req, order, parsed.data.confirmationToken))) {
       return res.status(404).json({ error: "Order not found" });
     }
     if (!order.payment_transaction_id) {
       return res.status(409).json({ error: "Order is not linked to a payment" });
     }
+    if (!order.payment_gateway_id) {
+      return res.status(409).json({ error: "Order is not linked to a payment gateway" });
+    }
 
-    const stripe = await getStripeInstance();
+    const stripe = await getStripeInstance(order.payment_gateway_id);
     const paymentIntent = await stripe.paymentIntents.retrieve(order.payment_transaction_id);
     if (paymentIntent.metadata.orderId !== order.id) {
       return res.status(409).json({ error: "Payment does not match this order" });

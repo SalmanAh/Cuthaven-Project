@@ -4,7 +4,7 @@
 **Market:** United States  
 **Catalog:** Garden, outdoor and power tools, e-bikes, scooters, camping, and pool products  
 **Repository:** `SalmanAh/Cuthaven-Project`  
-**Last code/document review:** 2026-09-28
+**Last code/document review:** 2026-09-29
 
 This is the primary project document. Detailed defect implementation and status tracking lives in [DEFECT_REMEDIATION_PLAN.md](DEFECT_REMEDIATION_PLAN.md). The implementation is the final source of truth when documentation and code disagree. Never place passwords, API secrets, payment credentials, customer data, private IP addresses, or access tokens here.
 
@@ -20,10 +20,8 @@ Verified repository health when this document was created:
 |---|---|
 | Backend `npm run typecheck` | Pass |
 | Frontend `npm run build` | Pass |
-| Frontend `npm run lint` | Fail: 190 errors and 18 warnings in 29 files |
-| Automated test suite | None present |
-| Git working tree before consolidation | Clean |
-| Application source size | Approximately 28,166 lines across 179 TS/TSX files |
+| Frontend `npm run lint` | Pass: zero errors and warnings |
+| Automated test suite | Backend: 35 tests passing |
 
 ## 2. Architecture
 
@@ -74,12 +72,13 @@ Important boundaries:
 │   ├── src/lib/               Tax and XML helpers
 │   ├── src/types/             Domain/API types
 │   └── package.json
-├── New Feature/               Historical customer-query SQL files
+├── supabase/migrations/       Current baseline plus incremental migrations
+├── supabase/README.md         Migration application and adoption notes
 ├── package.json               Development orchestrator
 └── README.md                  This document
 ```
 
-There is no canonical, complete database migration directory in this repository. Most SQL is ignored by `.gitignore`; only two historical query SQL files are present under `New Feature/`. A version-controlled schema/migration baseline is required for reproducible deployment.
+The current schema baseline, remediation migrations, storage-bucket configuration, and safe Supabase adoption procedure are versioned under `supabase/`.
 
 ## 4. Technology stack
 
@@ -187,11 +186,11 @@ The data was explicitly temporary because of catalog-quality concerns including 
 
 Supported operations: register, login, logout, current-user lookup, forgot/reset password, and token refresh.
 
-The frontend stores access token, refresh token, and a user snapshot in `localStorage`, refreshing on a 55-minute timer. Authenticated API calls use `Authorization: Bearer <token>`.
+The backend stores the rotating refresh token in an `HttpOnly`, `SameSite=Lax` cookie scoped to `/api/auth` (`Secure` in production). The frontend keeps the short-lived access token in memory only, restores sessions through the refresh cookie, and sends authenticated API calls with `Authorization: Bearer <token>`.
 
 The backend verifies the token through Supabase, then looks in `staff` and `customers`. Inactive profiles and identities without an application profile are rejected.
 
-Security consequence: `localStorage` increases the impact of XSS because scripts could steal the refresh token. Secure HTTP-only, SameSite cookie handling is recommended.
+Legacy auth keys are removed from `localStorage` during startup/logout. Exact-origin credentialed CORS protects cookie transport, and CSP is deployed report-only first so Stripe, PayPal, fonts, SSR, and hydration can be validated before enforcement.
 
 ## 8. API map
 
@@ -245,24 +244,24 @@ Routes below are under `/api`. `GET /health` is at the server root.
 | POST | `/checkout/payment-intent` | Public/optional auth |
 | POST | `/checkout/confirm-stripe-order` | Public/optional auth |
 | POST | `/checkout/webhook` | Stripe signature required |
-| GET | `/checkout/paypal/client-id` | Public |
+| GET | `/checkout/paypal/client-id` | Public compatibility alias; new clients use `/active-gateways` |
 | POST | `/checkout/paypal/create-order` | Public/optional auth |
 | POST | `/checkout/paypal/capture-order` | Public/optional auth |
-| GET | `/checkout/order/:id` | Public currently; must be hardened |
+| GET | `/checkout/order/:id` | Customer ownership or guest confirmation token required |
 
 ### Feed, uploads, and support
 
 | Method | Path | Access |
 |---|---|---|
 | GET | `/feed/products.xml` | Public; cached 30 minutes |
-| GET | `/feed/status` | Public currently |
+| GET | `/feed/status` | Admin only |
 | POST | `/upload/product-image` | Admin; 10 MB maximum |
-| POST | `/queries/conversations` | Public currently |
-| GET/POST | `/queries/conversations/:id/messages` | Public currently |
-| GET | `/queries/unread-count` | Public currently |
-| PATCH | `/queries/conversations/:id/read` | Public currently |
+| POST | `/queries/conversation` | Optional account auth; otherwise creates/uses an opaque guest token |
+| GET/POST | `/queries/conversation/messages` | Verified customer session or guest token |
+| GET | `/queries/conversation/unread-count` | Verified customer session or guest token |
+| PATCH | `/queries/conversation/read` | Verified customer session or guest token |
 
-The support routes lack adequate ownership proof; see Section 15.
+Customer identity is derived from the verified session. Guest email is profile data only; subsequent guest access requires `X-Guest-Conversation-Token`, whose hash alone is stored. Legacy guest chats without a token must start a new secure conversation.
 
 ### Administration
 
@@ -328,10 +327,10 @@ Rules:
 - A production Stripe webhook secret differs from a Stripe CLI secret.
 - Subscribe to `payment_intent.succeeded` and `payment_intent.payment_failed`.
 - Example webhook: `https://api.example.com/api/checkout/webhook`.
-- Code assumes one active gateway per type. The activation controller does not explicitly deactivate other rows; enforce this transactionally or with a verified DB constraint/trigger.
-- The admin detail API returns full unmasked credentials for editing. Prevent caching/logging and protect admin access rigorously.
+- The CH-007 migration enforces one active gateway per type and provides an atomic activation operation.
+- Admin gateway APIs return masked credential hints only and use `Cache-Control: private, no-store`; editing retains stored credentials unless an administrator enters replacements.
 
-Checkout fails clearly when the database or active configuration is absent. Deprecated payment environment fields remain in the schema, but current Stripe and PayPal implementations use database configuration.
+Checkout fails clearly when the database or active configuration is absent. Stripe and PayPal credentials are database-only configuration.
 
 ## 11. Customer-support conversations
 
@@ -361,7 +360,7 @@ Responsive work covers navigation, footer, homepage, shop, product, cart, checko
 Frontend state:
 
 - Cart and wishlist: React contexts plus `localStorage`
-- Authentication: context plus `localStorage`
+- Authentication: context with an in-memory access token and an HttpOnly refresh cookie
 - Server data: TanStack Query with five-minute stale time, ten-minute GC, one retry, and no focus refetch
 
 ## 13. Performance and platform controls
@@ -382,7 +381,7 @@ Cautions:
 
 - Build reports a roughly 544 KB uncompressed general vendor chunk plus large chart/route chunks.
 - Nitro ignores some configured manual chunk settings.
-- Vite now has native TypeScript path support, making `vite-tsconfig-paths` removable.
+- The direct `vite-tsconfig-paths` dependency was removed; the current Lovable configuration still loads its bundled copy until CH-013 selects the final build target.
 - Old performance numbers were estimates, not measurements. Establish real Lighthouse/Core Web Vitals baselines.
 
 ## 14. Local development
@@ -391,7 +390,7 @@ Cautions:
 
 - Node.js 22+ recommended
 - npm required for backend
-- Root script uses Bun for frontend; npm also works inside `frontend/`
+- npm is the repository package manager for both applications
 - Configured Supabase and environment files required for real API behavior
 
 ```bash
@@ -406,7 +405,7 @@ cd backend && npm install
 cd ../frontend && npm install
 ```
 
-The frontend has both `bun.lock` and `package-lock.json`. Choose one frontend package manager to prevent drift.
+The frontend uses the committed `package-lock.json`; deterministic installs use `npm ci`.
 
 ### Environment and run
 
@@ -443,19 +442,19 @@ The file-by-file implementation strategy, migrations, test matrix, rollout plan,
 1. **Stripe raw-body routing is code-complete; staging verification remains.** The webhook now mounts with route-scoped `express.raw()` before global JSON parsing, with signature/middleware regression coverage. See CH-001 in the remediation tracker.
 2. **Stripe paid-without-order prevention is code-complete; staging verification remains.** A pending Supabase order now exists before Stripe exposes a payable intent, redirects use the internal order ID, and the CH-002 migration is installed.
 3. **Checkout-effect idempotency is code-complete; concurrency/staging verification remains.** Transactional RPCs now reserve/release stock and coupons, finalize each provider transaction once, write history, and enqueue one retryable confirmation email. CH-003 is installed; duplicate callbacks and stock/coupon races still require staging verification.
-4. **Do not use provider metadata as the only order draft.** Persist a pending server-side draft and put only its stable reference in payment metadata.
+4. **PayPal trusted drafts are code-complete; sandbox/concurrency verification remains.** PayPal now persists and reserves a server-owned draft before provider approval, capture accepts no browser-owned order data, and exact provider amount/currency/reference are verified. The migration, object/permission checks, and rollback-only database functional test passed.
 5. **Run provider E2E tests.** Cover success, decline, duplicate/delayed webhook, invalid signature, browser close/retry, stock/coupon races, email failure, refund/failure, PayPal retry, and database interruption.
 
 ### P0 — authorization and privacy
 
-1. **Query ownership is absent.** Public callers can submit arbitrary customer IDs/emails, read messages by conversation UUID, send to conversations, inspect unread state, and mark them read. Service-role access means RLS does not help. Require account ownership or a signed rotating guest token.
-2. **Order summary is public by UUID and returns full rows.** Require customer ownership or a short-lived signed guest token and return an explicit minimal projection.
-3. **Audit every public `supabaseAdmin` handler** for explicit authorization, ownership, and minimal response fields.
+1. Query ownership now uses verified customer sessions or hashed opaque guest tokens; live cross-user verification remains.
+2. Order summaries now require customer ownership or a guest confirmation token and return a minimal projection; deployed privacy verification remains.
+3. Continue auditing every public `supabaseAdmin` handler for explicit authorization, ownership, and minimal response fields.
 
 ### P1 — release quality
 
 1. Add tests for checkout/webhooks, auth/roles, ownership, conversations, coupons, products, and gateway activation.
-2. Fix all 190 frontend lint errors and 18 warnings; review instead of blindly suppressing them.
+2. Keep frontend lint at zero and enforce it in CI; polling and critical browser E2E coverage remain.
 3. Version the complete database schema: functions, constraints, indexes, triggers, RLS, storage, and seeds.
 4. Add CI for deterministic install, backend typecheck/build, frontend lint/build, and tests.
 5. Verify email with a production Resend domain and failure scenarios.
@@ -463,14 +462,12 @@ The file-by-file implementation strategy, migrations, test matrix, rollout plan,
 
 ### P2 — security and maintainability
 
-1. Move refresh-token handling to secure HTTP-only cookies where feasible.
-2. `supabaseAuth` uses the service-role key despite comments calling it anon-level; use least privilege or correct the design/comments after review.
-3. Make gateway activation transactional and guarantee one active row per type.
+1. Validate CSP reports and then promote the payment-aware policy from report-only to enforcement.
+2. Keep normal user authentication on `SUPABASE_ANON_KEY`; reserve the service-role client for explicit trusted backend operations.
+3. Gateway activation is transactional and guarantees one active row per type; live concurrency verification remains.
 4. Consider application-level credential encryption or a secret manager; database-only is a source-of-truth choice, not complete secrets management.
-5. Restrict `/feed/status` if operational data should not be public.
+5. Verify `/feed/status` administrator access in the deployed environment.
 6. Add security logging, alerts, dependency scanning, restore testing, and rotation procedures.
-7. Remove deprecated payment environment fields when compatibility is no longer needed.
-8. Remove stale comments such as the nonexistent TaxJar integration description.
 
 ## 16. Environment variables
 
@@ -484,18 +481,18 @@ Create `backend/.env` from the example.
 | `NODE_ENV` | No | `development`, `production`, or `test` |
 | `FRONTEND_ORIGIN` | Yes | Exact comma-separated CORS origins; no trailing slash |
 | `SUPABASE_URL` | Yes | Project URL |
+| `SUPABASE_ANON_KEY` | Yes | Anon key used for normal user authentication |
 | `SUPABASE_SERVICE_ROLE_KEY` | Yes | Server-only privileged key |
 | `STORE_URL` | No | Public store URL |
 | `RESEND_API_KEY` | Production | Transactional email |
 | `FROM_EMAIL` | No | Verified sender |
-| `PAYPAL_CLIENT_ID/SECRET/MODE` | Deprecated | Active flow uses database values |
-| `STRIPE_SECRET_KEY/WEBHOOK_SECRET` | Deprecated | Active flow uses database values |
 
 ```dotenv
 PORT=4000
 NODE_ENV=production
 FRONTEND_ORIGIN=https://example.com,https://www.example.com
 SUPABASE_URL=https://your-project.supabase.co
+SUPABASE_ANON_KEY=replace-with-project-anon-key
 SUPABASE_SERVICE_ROLE_KEY=replace-with-server-only-secret
 STORE_URL=https://example.com
 RESEND_API_KEY=replace-with-resend-secret
@@ -634,8 +631,8 @@ Expected health shape: `{"status":"ok","env":"production"}`.
 | CORS failure | Exact scheme/host; apex and `www`; no trailing slash |
 | No payment option | Active gateway rows and public config response |
 | Stripe webhook 400 | Fix raw-body order, then endpoint secret/signature |
-| Paid but no order | Known P0 defect; inspect provider/application logs and reconcile |
-| Duplicate stock/email | Known idempotency risk; inspect retry/race processing |
+| Paid but no order | Inspect reconciliation logs, provider identifiers, and finalization outcome |
+| Duplicate stock/email | Inspect idempotency keys, outbox state, and callback history |
 | Email missing | Resend key/domain, backend logs, provider events |
 | 401 | Expired token, refresh, missing application profile |
 | 403 | Inactive account or wrong role |

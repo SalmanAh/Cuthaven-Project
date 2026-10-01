@@ -762,8 +762,9 @@ function PayPalPaymentForm({
         onApprove={async () => {
           try {
             const result = await capturePayPalOrder(
+              paypalData.orderId,
               paypalData.paypalOrderId,
-              paypalData._checkoutData,
+              paypalData.confirmationToken,
             );
             if (result.success) {
               onSuccess(result.orderId, result.confirmationToken);

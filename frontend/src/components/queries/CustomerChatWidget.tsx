@@ -1,13 +1,17 @@
-import { useState, useEffect, useRef, FormEvent } from "react";
+import { useState, useEffect, useRef, useCallback, FormEvent } from "react";
 import { Send, X } from "lucide-react";
 import {
   getOrCreateConversation,
   getConversationMessages,
   sendMessage,
   markConversationAsRead,
+  clearGuestConversationAccess,
+  hasGuestConversationAccess,
+  storeGuestConversationAccess,
   type Message,
   type Conversation,
 } from "@/lib/queries-client";
+import { useAuth } from "@/context/AuthContext";
 
 interface CustomerChatWidgetProps {
   onClose: () => void;
@@ -20,6 +24,7 @@ export default function CustomerChatWidget({
   onConversationReady,
   onUnreadCountChange,
 }: CustomerChatWidgetProps) {
+  const { user, isLoading: isAuthLoading } = useAuth();
   const [conversation, setConversation] = useState<Conversation | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
   const [newMessage, setNewMessage] = useState("");
@@ -29,7 +34,7 @@ export default function CustomerChatWidget({
   const [isLoading, setIsLoading] = useState(true);
   const [isSending, setIsSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  
+
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const pollingIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const lastFetchTimeRef = useRef<number>(Date.now());
@@ -43,84 +48,99 @@ export default function CustomerChatWidget({
     scrollToBottom();
   }, [messages]);
 
-  // Get user identifier
-  const getUserIdentifier = () => {
-    if (typeof window === "undefined") return null;
+  const stopPolling = useCallback(() => {
+    if (pollingIntervalRef.current) {
+      clearInterval(pollingIntervalRef.current);
+      pollingIntervalRef.current = null;
+    }
+  }, []);
 
-    // Check for logged-in user
-    const token = localStorage.getItem("ch-access-token");
-    if (token) {
+  // Polling for new messages (backend API only)
+  const startPolling = useCallback(() => {
+    if (pollingIntervalRef.current) return;
+
+    pollingIntervalRef.current = setInterval(async () => {
       try {
-        const payload = JSON.parse(atob(token.split(".")[1]));
-        return { type: "customer" as const, id: payload.sub };
+        const msgs = await getConversationMessages();
+        const newMessages = msgs.filter(
+          (message) => new Date(message.created_at).getTime() > lastFetchTimeRef.current,
+        );
+
+        if (newMessages.length > 0) {
+          lastFetchTimeRef.current = Date.now();
+          setMessages((previous) => {
+            const combined = [...previous];
+            newMessages.forEach((newMessage) => {
+              if (!combined.some((message) => message.id === newMessage.id)) {
+                combined.push(newMessage);
+              }
+            });
+            return combined.sort(
+              (first, second) =>
+                new Date(first.created_at).getTime() - new Date(second.created_at).getTime(),
+            );
+          });
+
+          if (newMessages.some((message) => message.is_admin)) {
+            await markConversationAsRead();
+            onUnreadCountChange(0);
+          }
+        }
       } catch {
-        // Invalid token
+        // Polling retries on the next interval.
       }
-    }
-
-    // Check for guest email
-    const storedEmail = localStorage.getItem("ch-guest-email");
-    const storedName = localStorage.getItem("ch-guest-name");
-    if (storedEmail && storedName) {
-      return { type: "guest" as const, email: storedEmail, name: storedName };
-    }
-
-    return null;
-  };
+    }, 5000);
+  }, [onUnreadCountChange]);
 
   // Initialize conversation and start polling
   useEffect(() => {
     let mounted = true;
 
     const initChat = async () => {
-      if (!mounted) return;
-      
+      if (!mounted || isAuthLoading) return;
+
       try {
         setIsLoading(true);
         setError(null);
 
-        const userIdentifier = getUserIdentifier();
-
-        if (!userIdentifier) {
+        if (!user && !hasGuestConversationAccess()) {
           setIsGuestFormVisible(true);
           setIsLoading(false);
           return;
         }
 
-        let conv: Conversation;
-        if (userIdentifier.type === "customer") {
-          conv = await getOrCreateConversation({ customer_id: userIdentifier.id });
-        } else {
-          conv = await getOrCreateConversation({
-            guest_email: userIdentifier.email,
-            guest_name: userIdentifier.name,
-          });
-        }
+        const response = await getOrCreateConversation();
+        const conv = response.conversation;
 
         if (!mounted) return;
 
         setConversation(conv);
         onConversationReady(conv.id, conv.unread_by_customer);
 
-        const msgs = await getConversationMessages(conv.id);
-        
+        const msgs = await getConversationMessages();
+
         if (!mounted) return;
-        
+
         setMessages(msgs);
 
         if (conv.unread_by_customer > 0) {
-          await markConversationAsRead(conv.id);
+          await markConversationAsRead();
           onUnreadCountChange(0);
         }
 
         // Start polling for new messages (5 second interval)
-        startPolling(conv.id);
+        startPolling();
 
         setIsLoading(false);
       } catch (err) {
         console.error("Failed to initialize chat:", err);
         if (mounted) {
-          setError("Failed to load chat. Please try again.");
+          if (!user) {
+            clearGuestConversationAccess();
+            setIsGuestFormVisible(true);
+          } else {
+            setError("Failed to load chat. Please try again.");
+          }
           setIsLoading(false);
         }
       }
@@ -132,82 +152,34 @@ export default function CustomerChatWidget({
       mounted = false;
       stopPolling();
     };
-  }, []);
-
-  // Polling for new messages (backend API only)
-  const startPolling = (conversationId: string) => {
-    if (pollingIntervalRef.current) return; // Already polling
-
-    pollingIntervalRef.current = setInterval(async () => {
-      try {
-        const msgs = await getConversationMessages(conversationId);
-        
-        // Find messages newer than last fetch
-        const newMessages = msgs.filter(m => 
-          new Date(m.created_at).getTime() > lastFetchTimeRef.current
-        );
-
-        if (newMessages.length > 0) {
-          lastFetchTimeRef.current = Date.now();
-          
-          setMessages((prev) => {
-            const combined = [...prev];
-            newMessages.forEach(newMsg => {
-              if (!combined.some(m => m.id === newMsg.id)) {
-                combined.push(newMsg);
-              }
-            });
-            return combined.sort((a, b) => 
-              new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
-            );
-          });
-
-          // Mark admin messages as read
-          if (newMessages.some(m => m.is_admin)) {
-            await markConversationAsRead(conversationId);
-            onUnreadCountChange(0);
-          }
-        }
-      } catch (err) {
-        // Silently handle polling errors
-      }
-    }, 5000); // Poll every 5 seconds
-  };
-
-  const stopPolling = () => {
-    if (pollingIntervalRef.current) {
-      clearInterval(pollingIntervalRef.current);
-      pollingIntervalRef.current = null;
-    }
-  };
+  }, [isAuthLoading, onConversationReady, onUnreadCountChange, startPolling, stopPolling, user]);
 
   // Handle guest form submission
   const handleGuestFormSubmit = async (e: FormEvent) => {
     e.preventDefault();
     if (!guestName.trim() || !guestEmail.trim()) return;
 
-    // Store guest info
-    localStorage.setItem("ch-guest-email", guestEmail);
-    localStorage.setItem("ch-guest-name", guestName);
-
     setIsGuestFormVisible(false);
-    
+
     // Reinitialize chat with guest info
     try {
       setIsLoading(true);
-      const conv = await getOrCreateConversation({
-        guest_email: guestEmail,
-        guest_name: guestName,
+      const response = await getOrCreateConversation({
+        guestEmail,
+        guestName,
       });
+      const conv = response.conversation;
+      if (!response.guestToken) throw new Error("Guest token was not returned");
+      storeGuestConversationAccess(conv.id, response.guestToken);
 
       setConversation(conv);
       onConversationReady(conv.id, conv.unread_by_customer);
 
-      const msgs = await getConversationMessages(conv.id);
+      const msgs = await getConversationMessages();
       setMessages(msgs);
 
       // Start polling
-      startPolling(conv.id);
+      startPolling();
 
       setIsLoading(false);
     } catch (err) {
@@ -239,16 +211,11 @@ export default function CustomerChatWidget({
     setMessages((prev) => [...prev, optimisticMessage]);
 
     try {
-      const userIdentifier = getUserIdentifier();
-      const senderId = userIdentifier?.type === "customer" ? userIdentifier.id : undefined;
+      const sentMessage = await sendMessage(messageText);
 
-      const sentMessage = await sendMessage(conversation.id, messageText, senderId);
-      
       // Replace optimistic message with real one
-      setMessages((prev) =>
-        prev.map((m) => (m.id === tempId ? sentMessage : m))
-      );
-      
+      setMessages((prev) => prev.map((m) => (m.id === tempId ? sentMessage : m)));
+
       setIsSending(false);
     } catch (err) {
       console.error("Failed to send message:", err);
@@ -340,9 +307,7 @@ export default function CustomerChatWidget({
           <div className="flex-1 overflow-y-auto p-4 space-y-3">
             {messages.length === 0 && (
               <div className="flex flex-col items-center justify-center h-full text-center">
-                <p className="text-sm text-gray-600">
-                  Start a conversation! We're here to help.
-                </p>
+                <p className="text-sm text-gray-600">Start a conversation! We're here to help.</p>
               </div>
             )}
             {messages.map((msg) => (
@@ -352,17 +317,11 @@ export default function CustomerChatWidget({
               >
                 <div
                   className={`max-w-[75%] rounded-lg px-3 py-2 ${
-                    msg.is_admin
-                      ? "bg-gray-100 text-gray-900"
-                      : "bg-primary text-white"
+                    msg.is_admin ? "bg-gray-100 text-gray-900" : "bg-primary text-white"
                   }`}
                 >
                   <p className="text-sm">{msg.message}</p>
-                  <p
-                    className={`mt-1 text-xs ${
-                      msg.is_admin ? "text-gray-500" : "text-white/70"
-                    }`}
-                  >
+                  <p className={`mt-1 text-xs ${msg.is_admin ? "text-gray-500" : "text-white/70"}`}>
                     {formatTime(msg.created_at)}
                   </p>
                 </div>
@@ -372,10 +331,7 @@ export default function CustomerChatWidget({
           </div>
 
           {/* Input */}
-          <form
-            onSubmit={handleSendMessage}
-            className="border-t border-gray-200 p-4 flex gap-2"
-          >
+          <form onSubmit={handleSendMessage} className="border-t border-gray-200 p-4 flex gap-2">
             <input
               type="text"
               placeholder="Type your message..."

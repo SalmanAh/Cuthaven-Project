@@ -1,12 +1,13 @@
 import { useState, useEffect, useCallback } from "react";
 import { MessageCircle, Search, Clock, User } from "lucide-react";
 import { toast } from "sonner";
+import { errorMessage } from "@/lib/utils";
 import { DashCard } from "@/components/dashboard/DashboardShell";
 import { adminGetConversations, type ConversationWithParticipant } from "@/lib/queries-client";
 
 /**
  * QueriesList - Admin view of all customer conversations
- * 
+ *
  * Features:
  * - Paginated list (50 per page with Load More)
  * - Polling for new conversations (backend API only)
@@ -15,7 +16,11 @@ import { adminGetConversations, type ConversationWithParticipant } from "@/lib/q
  * - Search by customer name/email
  */
 
-export function QueriesList({ onSelectConversation }: { onSelectConversation: (id: string) => void }) {
+export function QueriesList({
+  onSelectConversation,
+}: {
+  onSelectConversation: (id: string) => void;
+}) {
   const [conversations, setConversations] = useState<ConversationWithParticipant[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
@@ -26,34 +31,37 @@ export function QueriesList({ onSelectConversation }: { onSelectConversation: (i
   const PAGE_SIZE = 50;
 
   // Load conversations with pagination
-  const loadConversations = useCallback(async (pageNum: number, append = false) => {
-    try {
-      if (append) {
-        setLoadingMore(true);
-      } else {
-        setLoading(true);
+  const loadConversations = useCallback(
+    async (pageNum: number, append = false) => {
+      try {
+        if (append) {
+          setLoadingMore(true);
+        } else {
+          setLoading(true);
+        }
+
+        const res = await adminGetConversations({
+          page: pageNum,
+          limit: PAGE_SIZE,
+          search: searchQuery || undefined,
+        });
+
+        if (append) {
+          setConversations((prev) => [...prev, ...res.conversations]);
+        } else {
+          setConversations(res.conversations);
+        }
+
+        setHasMore(res.conversations.length === PAGE_SIZE);
+      } catch (err: unknown) {
+        toast.error(errorMessage(err, "Failed to load conversations"));
+      } finally {
+        setLoading(false);
+        setLoadingMore(false);
       }
-
-      const res = await adminGetConversations({
-        page: pageNum,
-        limit: PAGE_SIZE,
-        search: searchQuery || undefined,
-      });
-
-      if (append) {
-        setConversations((prev) => [...prev, ...res.conversations]);
-      } else {
-        setConversations(res.conversations);
-      }
-
-      setHasMore(res.conversations.length === PAGE_SIZE);
-    } catch (err: any) {
-      toast.error(err.message ?? "Failed to load conversations");
-    } finally {
-      setLoading(false);
-      setLoadingMore(false);
-    }
-  }, [searchQuery]);
+    },
+    [searchQuery],
+  );
 
   // Initial load
   useEffect(() => {

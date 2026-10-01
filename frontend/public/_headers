@@ -43,8 +43,8 @@
 
 # Security headers for all routes
 /*
+  content-security-policy-report-only: default-src 'self'; script-src 'self' https://js.stripe.com https://www.paypal.com https://www.paypalobjects.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' data: https://fonts.gstatic.com; img-src 'self' data: https:; connect-src 'self' https:; frame-src https://js.stripe.com https://hooks.stripe.com https://www.paypal.com; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; form-action 'self'; upgrade-insecure-requests
   x-frame-options: DENY
   x-content-type-options: nosniff
   referrer-policy: strict-origin-when-cross-origin
   permissions-policy: geolocation=(), microphone=(), camera=()
-

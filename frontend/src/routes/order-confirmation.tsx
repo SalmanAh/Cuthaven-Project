@@ -1,6 +1,6 @@
 import { createFileRoute, Link, useSearch } from "@tanstack/react-router";
 import { CheckCircle2, Package } from "lucide-react";
-import { useEffect, useRef } from "react";
+import { useEffect, useLayoutEffect, useRef } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { z } from "zod";
 import { getOrderSummary } from "@/lib/api-client";
@@ -14,7 +14,11 @@ const searchSchema = z.object({
 export const Route = createFileRoute("/order-confirmation")({
   validateSearch: searchSchema,
   head: () => ({
-    meta: [{ title: "Order Confirmed — CutHaven" }, { name: "robots", content: "noindex" }],
+    meta: [
+      { title: "Order Confirmed — CutHaven" },
+      { name: "robots", content: "noindex" },
+      { name: "referrer", content: "no-referrer" },
+    ],
   }),
   component: OrderConfirmationPage,
 });
@@ -24,10 +28,24 @@ function OrderConfirmationPage() {
   const { clear } = useCart();
   const pollDeadline = useRef(Date.now() + 60_000);
   const cartCleared = useRef(false);
+  const tokenKey = orderId ? `ch-order-confirmation:${orderId}` : null;
+  const confirmationToken =
+    token ??
+    (tokenKey && typeof window !== "undefined"
+      ? (sessionStorage.getItem(tokenKey) ?? undefined)
+      : undefined);
+
+  useLayoutEffect(() => {
+    if (!orderId || !token || !tokenKey) return;
+    sessionStorage.setItem(tokenKey, token);
+    const url = new URL(window.location.href);
+    url.searchParams.delete("token");
+    window.history.replaceState(window.history.state, "", url);
+  }, [orderId, token, tokenKey]);
 
   const { data, isLoading, isError } = useQuery({
-    queryKey: ["order-summary", orderId, token],
-    queryFn: () => getOrderSummary(orderId!, token),
+    queryKey: ["order-summary", orderId],
+    queryFn: () => getOrderSummary(orderId!, confirmationToken),
     enabled: !!orderId,
     refetchInterval: (query) => {
       const current = query.state.data;
@@ -68,8 +86,6 @@ function OrderConfirmationPage() {
   }
 
   const { order, items } = data;
-  const addr = order.shipping_address;
-
   return (
     <div className="mx-auto max-w-2xl px-4 py-16">
       <div className="text-center mb-10">
@@ -82,7 +98,7 @@ function OrderConfirmationPage() {
         </p>
         <p className="text-text-secondary mt-3 max-w-md mx-auto text-sm">
           We've received your order and will begin processing it shortly. A confirmation email will
-          be sent to <span className="font-semibold">{addr.email}</span>.
+          be sent to the address used during checkout.
         </p>
         <p className="mt-3 text-sm">
           <span className="font-semibold">Estimated Delivery:</span> 5–8 business days
@@ -137,15 +153,6 @@ function OrderConfirmationPage() {
         <div className="flex justify-between text-lg font-bold pt-4">
           <span>Total</span>
           <span className="text-accent">${order.total.toFixed(2)}</span>
-        </div>
-
-        <div className="mt-5 pt-4 border-t border-border text-sm">
-          <p className="font-semibold mb-1">Shipping to</p>
-          <p className="text-text-secondary">
-            {addr.firstName} {addr.lastName}
-            <br />
-            {addr.address}, {addr.city}, {addr.state} {addr.zip}
-          </p>
         </div>
       </div>
 

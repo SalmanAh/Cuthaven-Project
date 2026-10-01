@@ -5,6 +5,7 @@ import { ProductCard } from "@/components/ui/ProductCard";
 import { getProducts, getCategories, submitContact } from "@/lib/api-client";
 import { useState } from "react";
 import { toast } from "sonner";
+import { errorMessage } from "@/lib/utils";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -33,7 +34,6 @@ export const Route = createFileRoute("/")({
         imageSrcSet:
           "https://images.unsplash.com/photo-1581244277943-fe4a9c777189?w=600&h=600&auto=format&fit=crop&q=75&fm=webp 600w, https://images.unsplash.com/photo-1581244277943-fe4a9c777189?w=800&h=800&auto=format&fit=crop&q=75&fm=webp 800w",
         imageSizes: "(max-width: 1024px) 0px, (max-width: 1280px) 520px, 600px",
-        fetchPriority: "high" as any,
       },
     ],
   }),
@@ -492,8 +492,8 @@ function ReviewForm() {
       setProduct("");
       setReview("");
       setTimeout(() => setSubmitted(false), 5000);
-    } catch (err: any) {
-      toast.error(err.message ?? "Failed to submit. Please try again.");
+    } catch (err: unknown) {
+      toast.error(errorMessage(err, "Failed to submit. Please try again."));
     } finally {
       setLoading(false);
     }

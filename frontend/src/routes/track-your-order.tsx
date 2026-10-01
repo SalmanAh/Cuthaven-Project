@@ -18,6 +18,7 @@ import {
 import { PageHero } from "@/components/ui/PageHero";
 import { trackOrder, type TrackOrderResult } from "@/lib/api-client";
 import { toast } from "sonner";
+import { errorMessage } from "@/lib/utils";
 
 export const Route = createFileRoute("/track-your-order")({
   head: () => ({
@@ -59,8 +60,8 @@ function TrackOrderPage() {
     try {
       const data = await trackOrder(o.toUpperCase(), em.toLowerCase());
       setResult(data);
-    } catch (err: any) {
-      toast.error(err.message ?? "Order not found. Check your details and try again.");
+    } catch (err: unknown) {
+      toast.error(errorMessage(err, "Order not found. Check your details and try again."));
     } finally {
       setLoading(false);
     }

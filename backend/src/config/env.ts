@@ -6,6 +6,7 @@ const envSchema = z.object({
   NODE_ENV: z.enum(["development", "production", "test"]).default("development"),
   FRONTEND_ORIGIN: z.string().url(),
   SUPABASE_URL: z.string().url(),
+  SUPABASE_ANON_KEY: z.string().min(1),
   SUPABASE_SERVICE_ROLE_KEY: z.string().min(1),
   // Resend — transactional email. Get from https://resend.com/api-keys
   // Optional in development (emails are skipped with a console log when absent).
@@ -19,16 +20,6 @@ const envSchema = z.object({
   // Prod: https://www.cuthaven.com
   STORE_URL: z.string().url().default("http://localhost:8080"),
 
-  // PayPal — DEPRECATED: Now managed via payment_gateways table
-  // These are kept as optional fallback for backward compatibility
-  PAYPAL_CLIENT_ID:     z.string().optional(),
-  PAYPAL_CLIENT_SECRET: z.string().optional(),
-  PAYPAL_MODE: z.enum(["sandbox", "live"]).default("sandbox"),
-
-  // Stripe — DEPRECATED: Now managed via payment_gateways table
-  // These are kept as optional fallback for backward compatibility
-  STRIPE_SECRET_KEY: z.string().optional(),
-  STRIPE_WEBHOOK_SECRET: z.string().optional(),
 });
 
 const parsed = envSchema.safeParse(process.env);

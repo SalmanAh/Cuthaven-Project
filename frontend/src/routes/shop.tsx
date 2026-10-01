@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { LayoutGrid, List, X, Search } from "lucide-react";
 import { PageHero } from "@/components/ui/PageHero";
@@ -74,11 +74,11 @@ function ShopPage() {
   const [maxPrice, setMaxPrice] = useState(highestPrice);
 
   // Update maxPrice when products load and highestPrice changes
-  useMemo(() => {
+  useEffect(() => {
     if (highestPrice > maxPrice) {
       setMaxPrice(highestPrice);
     }
-  }, [highestPrice]);
+  }, [highestPrice, maxPrice]);
 
   const filtered = useMemo(() => {
     let list = (products ?? []).filter((p) => {

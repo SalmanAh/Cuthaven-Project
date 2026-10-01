@@ -31,7 +31,9 @@ function getSessionId(): string {
 // Detect Global Privacy Control signal (CCPA opt-out)
 function detectGPC(): boolean {
   try {
-    return !!(navigator as any).globalPrivacyControl;
+    return Boolean(
+      (navigator as Navigator & { globalPrivacyControl?: boolean }).globalPrivacyControl,
+    );
   } catch {
     return false;
   }
@@ -54,7 +56,9 @@ export function CookieConsent({ openSignal = 0 }: { openSignal?: number }) {
     try {
       const s = localStorage.getItem(KEY);
       if (!s) setVisible(true);
-    } catch {}
+    } catch {
+      // Storage may be unavailable in privacy mode; show the banner normally.
+    }
   }, []);
 
   useEffect(() => {
@@ -66,7 +70,9 @@ export function CookieConsent({ openSignal = 0 }: { openSignal?: number }) {
           setAnalytics(p.analytics);
           setMarketing(p.marketing);
         }
-      } catch {}
+      } catch {
+        // Invalid or unavailable storage falls back to default preferences.
+      }
       setVisible(true);
       setCustomize(true);
     }
@@ -76,7 +82,9 @@ export function CookieConsent({ openSignal = 0 }: { openSignal?: number }) {
     const prefs: Prefs = { necessary: true, analytics: a, marketing: m, timestamp: Date.now() };
     try {
       localStorage.setItem(KEY, JSON.stringify(prefs));
-    } catch {}
+    } catch {
+      // Consent still applies for this page even when persistence is unavailable.
+    }
 
     // Determine the canonical consent action
     let action: "accept_all" | "reject_all" | "custom";

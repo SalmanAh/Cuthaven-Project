@@ -21,7 +21,7 @@ export function RequireAuth({ children, roles }: Props) {
   const { user, isLoading } = useAuth();
   const location = useLocation();
 
-  // Still hydrating from localStorage — render nothing to avoid flicker
+  // Still restoring the cookie-backed session — render nothing to avoid flicker
   if (isLoading) {
     return (
       <div className="flex min-h-[60vh] items-center justify-center">

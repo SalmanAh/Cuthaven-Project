@@ -1,4 +1,4 @@
-// Mirrors the orders + order_items tables in cuthaven_db_schema.sql
+// Mirrors the orders + order_items tables in the versioned Supabase migrations.
 
 export interface OrderItem {
   id: string;

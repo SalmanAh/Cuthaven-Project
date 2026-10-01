@@ -77,6 +77,7 @@ export type CreatePaymentGatewayRequest =
 
 export interface ActiveStripeConfig {
   type: "stripe";
+  gatewayId: string;
   secretKey: string;
   publishableKey: string;
   webhookSecret: string;
@@ -84,6 +85,7 @@ export interface ActiveStripeConfig {
 
 export interface ActivePayPalConfig {
   type: "paypal";
+  gatewayId: string;
   clientId: string;
   clientSecret: string;
   mode: PayPalMode;

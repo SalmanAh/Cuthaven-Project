@@ -10,6 +10,7 @@ import {
 } from "@/components/ui/accordion";
 import { submitContact } from "@/lib/api-client";
 import { toast } from "sonner";
+import { errorMessage } from "@/lib/utils";
 
 export const Route = createFileRoute("/contact-us")({
   head: () => ({
@@ -81,8 +82,8 @@ function ContactPage() {
         message: form.message,
       });
       setSent(true);
-    } catch (err: any) {
-      toast.error(err.message ?? "Failed to send message. Please try again.");
+    } catch (err: unknown) {
+      toast.error(errorMessage(err, "Failed to send message. Please try again."));
     } finally {
       setLoading(false);
     }

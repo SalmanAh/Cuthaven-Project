@@ -16,12 +16,16 @@ export function WishlistProvider({ children }: { children: ReactNode }) {
     try {
       const stored = typeof window !== "undefined" ? localStorage.getItem("ch-wishlist") : null;
       if (stored) setIds(JSON.parse(stored));
-    } catch {}
+    } catch {
+      // Invalid or unavailable storage falls back to an empty wishlist.
+    }
   }, []);
   useEffect(() => {
     try {
       if (typeof window !== "undefined") localStorage.setItem("ch-wishlist", JSON.stringify(ids));
-    } catch {}
+    } catch {
+      // A storage failure should not block wishlist interaction.
+    }
   }, [ids]);
 
   const toggle = (id: string) =>

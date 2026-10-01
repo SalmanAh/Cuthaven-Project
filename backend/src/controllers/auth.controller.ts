@@ -3,6 +3,45 @@ import { z } from "zod";
 import { supabaseAdmin, supabaseAuth } from "../config/supabase.js";
 import type { AuthResponse } from "../types/auth.js";
 
+const REFRESH_COOKIE = "ch-refresh-token";
+const REFRESH_COOKIE_PATH = "/api/auth";
+const REFRESH_COOKIE_MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000;
+
+function setRefreshCookie(res: Response, token: string) {
+  res.cookie(REFRESH_COOKIE, token, {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === "production",
+    sameSite: "lax",
+    path: REFRESH_COOKIE_PATH,
+    maxAge: REFRESH_COOKIE_MAX_AGE_MS,
+  });
+}
+
+function clearRefreshCookie(res: Response) {
+  res.clearCookie(REFRESH_COOKIE, {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === "production",
+    sameSite: "lax",
+    path: REFRESH_COOKIE_PATH,
+  });
+}
+
+function readRefreshCookie(req: Request): string | null {
+  const prefix = `${REFRESH_COOKIE}=`;
+  const value = req.headers.cookie
+    ?.split(";")
+    .map((part) => part.trim())
+    .find((part) => part.startsWith(prefix))
+    ?.slice(prefix.length);
+
+  if (!value) return null;
+  try {
+    return decodeURIComponent(value);
+  } catch {
+    return null;
+  }
+}
+
 // ─── Validation schemas ────────────────────────────────────────────────────
 
 const registerSchema = z.object({
@@ -89,9 +128,9 @@ export async function register(req: Request, res: Response, next: NextFunction) 
         lastName,
       },
       accessToken: sessionData.session.access_token,
-      refreshToken: sessionData.session.refresh_token,
     };
 
+    setRefreshCookie(res, sessionData.session.refresh_token);
     return res.status(201).json(response);
   } catch (err) {
     next(err);
@@ -136,8 +175,8 @@ export async function login(req: Request, res: Response, next: NextFunction) {
           lastName: staffRow.last_name,
         },
         accessToken: data.session.access_token,
-        refreshToken: data.session.refresh_token,
       };
+      setRefreshCookie(res, data.session.refresh_token);
       return res.json(response);
     }
 
@@ -160,8 +199,8 @@ export async function login(req: Request, res: Response, next: NextFunction) {
           lastName: customerRow.last_name,
         },
         accessToken: data.session.access_token,
-        refreshToken: data.session.refresh_token,
       };
+      setRefreshCookie(res, data.session.refresh_token);
       return res.json(response);
     }
 
@@ -175,6 +214,7 @@ export async function login(req: Request, res: Response, next: NextFunction) {
 // Invalidates the session on the Supabase side.
 export async function logout(req: Request, res: Response, next: NextFunction) {
   try {
+    clearRefreshCookie(res);
     const header = req.headers.authorization;
     if (header?.startsWith("Bearer ")) {
       // Best-effort sign-out — don't fail the request if it errors
@@ -202,7 +242,7 @@ export async function forgotPassword(req: Request, res: Response, next: NextFunc
     }
 
     // Always return success — never reveal whether an email is registered
-    await supabaseAdmin.auth.resetPasswordForEmail(parsed.data.email).catch(() => {});
+    await supabaseAuth.auth.resetPasswordForEmail(parsed.data.email).catch(() => {});
 
     return res.json({ message: "If that email exists, a reset link has been sent." });
   } catch (err) {
@@ -254,19 +294,21 @@ export async function resetPassword(req: Request, res: Response, next: NextFunct
 // Exchanges a refresh token for a new access token.
 export async function refreshToken(req: Request, res: Response, next: NextFunction) {
   try {
-    const { refreshToken: token } = req.body as { refreshToken?: string };
+    const token = readRefreshCookie(req);
     if (!token) {
-      return res.status(400).json({ error: "refreshToken is required" });
+      clearRefreshCookie(res);
+      return res.status(401).json({ error: "Refresh session missing. Please log in again." });
     }
 
     const { data, error } = await supabaseAuth.auth.refreshSession({ refresh_token: token });
     if (error || !data.session) {
+      clearRefreshCookie(res);
       return res.status(401).json({ error: "Refresh token invalid or expired. Please log in again." });
     }
 
+    setRefreshCookie(res, data.session.refresh_token);
     return res.json({
       accessToken: data.session.access_token,
-      refreshToken: data.session.refresh_token,
     });
   } catch (err) {
     next(err);

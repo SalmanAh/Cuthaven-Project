@@ -47,7 +47,9 @@ export function CartProvider({ children }: { children: ReactNode }) {
       if (typeof window !== "undefined") {
         localStorage.setItem(cartKey, JSON.stringify(items));
       }
-    } catch {}
+    } catch {
+      // A storage failure should not block cart interaction.
+    }
   }, [items, cartKey]);
 
   const addItem = (product: Product, qty = 1) => {
@@ -60,7 +62,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
       }
       return [...prev, { product, quantity: Math.min(qty, max) }];
     });
-    
+
     // Show toast notification once after state update
     toast.success("Item added to cart successfully");
   };

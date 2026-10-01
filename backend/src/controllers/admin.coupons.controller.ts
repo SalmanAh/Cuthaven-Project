@@ -2,7 +2,7 @@ import type { Request, Response, NextFunction } from "express";
 import { z } from "zod";
 import { supabaseAdmin } from "../config/supabase.js";
 
-// ─── Real schema columns (cuthaven_db_schema.sql) ─────────────────────────
+// ─── Coupon columns in the versioned Supabase migrations ──────────────────
 // code, discount_type, discount_value, min_order_amount, max_uses, used_count,
 // valid_from, valid_until, is_active, created_at, updated_at
 

@@ -50,7 +50,7 @@ export async function finalizePaidOrder(input: {
 export async function releaseCheckoutReservation(
   orderId: string,
   reason: string,
-  payment?: { provider: "stripe" | "paypal"; transactionId: string },
+  payment?: { provider: "stripe" | "paypal"; transactionId?: string },
 ): Promise<ReleaseOutcome> {
   const { data, error } = await supabaseAdmin.rpc("release_checkout_reservation", {
     p_order_id: orderId,

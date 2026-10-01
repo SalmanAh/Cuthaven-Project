@@ -1,5 +1,6 @@
 import { Router } from "express";
 import { getProductFeed, getFeedStatus } from "../controllers/feed.controller.js";
+import { requireAuth, requireRole } from "../middleware/requireAuth.js";
 
 export const feedRouter = Router();
 
@@ -18,7 +19,5 @@ export const feedRouter = Router();
 // The endpoint caches the XML for 30 minutes to avoid repeated DB hits.
 feedRouter.get("/products.xml", getProductFeed);
 
-// Feed sync log — last 20 entries. Used by admin dashboard in Milestone 5.
-// No auth guard for now (non-sensitive operational data); add requireRole("admin")
-// in M5 when admin endpoints are built.
-feedRouter.get("/status", getFeedStatus);
+// Feed sync log — operational details restricted to administrators.
+feedRouter.get("/status", requireAuth, requireRole("admin"), getFeedStatus);

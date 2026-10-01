@@ -3,6 +3,7 @@ import { createPaymentIntent, getOrderSummary, validateCoupon, confirmStripeOrde
 import { createPayPalOrder, capturePayPalOrder, getPayPalClientId } from "../controllers/paypal.controller.js";
 import { getActiveGatewaysForCheckout } from "../controllers/payment-gateways.controller.js";
 import { optionalAuth } from "../middleware/requireAuth.js";
+import { checkoutCreateLimiter } from "../middleware/rateLimiter.js";
 
 export const checkoutRouter = Router();
 
@@ -13,12 +14,13 @@ checkoutRouter.get("/active-gateways", getActiveGatewaysForCheckout);
 checkoutRouter.post("/validate-coupon", validateCoupon);
 
 // Stripe: persist pending order, then create/verify the provider payment.
-checkoutRouter.post("/payment-intent",        optionalAuth, createPaymentIntent);
+checkoutRouter.post("/payment-intent",        checkoutCreateLimiter, optionalAuth, createPaymentIntent);
 checkoutRouter.post("/confirm-stripe-order",  optionalAuth, confirmStripeOrder);
 
-// PayPal: create PayPal order (no DB), capture after approval (creates DB order)
+// PayPal: reserve a trusted DB draft before provider approval, then capture it.
+// The client-ID route remains as a compatibility alias; new clients use active-gateways.
 checkoutRouter.get(  "/paypal/client-id",    getPayPalClientId);
-checkoutRouter.post( "/paypal/create-order", optionalAuth, createPayPalOrder);
+checkoutRouter.post( "/paypal/create-order", checkoutCreateLimiter, optionalAuth, createPayPalOrder);
 checkoutRouter.post( "/paypal/capture-order",optionalAuth, capturePayPalOrder);
 
 // Order status/summary requires customer ownership or the guest token.

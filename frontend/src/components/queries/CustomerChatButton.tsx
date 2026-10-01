@@ -1,4 +1,4 @@
-import { useState, lazy, Suspense } from "react";
+import { useState, useCallback, lazy, Suspense } from "react";
 import { MessageCircle } from "lucide-react";
 
 // Lazy load the full chat widget (only loads when user clicks button)
@@ -24,10 +24,10 @@ export function CustomerChatButton() {
   };
 
   // Update conversation ID when widget provides it
-  const handleConversationReady = (convId: string, unread: number) => {
+  const handleConversationReady = useCallback((convId: string, unread: number) => {
     setConversationId(convId);
     setUnreadCount(unread);
-  };
+  }, []);
 
   return (
     <>
@@ -40,7 +40,7 @@ export function CustomerChatButton() {
           title="Chat with us"
         >
           <MessageCircle className="h-6 w-6" />
-          
+
           {/* Unread Badge */}
           {unreadCount > 0 && (
             <span className="absolute -top-1 -right-1 flex h-6 w-6 items-center justify-center rounded-full bg-red-500 text-xs font-bold text-white">

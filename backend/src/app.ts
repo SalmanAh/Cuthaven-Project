@@ -56,8 +56,13 @@ export function createApp({
         return callback(new Error(`Origin ${origin} not allowed by CORS`));
       },
       methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-      allowedHeaders: ["Content-Type", "Authorization"],
-      credentials: false,
+      allowedHeaders: [
+        "Content-Type",
+        "Authorization",
+        "X-Guest-Conversation-Token",
+        "X-Order-Confirmation-Token",
+      ],
+      credentials: true,
     }),
   );
 

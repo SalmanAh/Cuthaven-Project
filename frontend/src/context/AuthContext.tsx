@@ -7,6 +7,7 @@ import {
   useRef,
   type ReactNode,
 } from "react";
+import { getAccessToken, setAccessToken } from "@/lib/auth-session";
 
 // ─── Types ─────────────────────────────────────────────────────────────────
 
@@ -35,13 +36,10 @@ interface AuthContextValue extends AuthState {
 // ─── Storage keys ──────────────────────────────────────────────────────────
 
 const API_URL = import.meta.env.VITE_API_URL ?? "http://localhost:4000/api";
-const TOKEN_KEY = "ch-access-token";
-const REFRESH_KEY = "ch-refresh-token";
-const USER_KEY = "ch-user";
+const LEGACY_TOKEN_KEYS = ["ch-access-token", "ch-refresh-token", "ch-user"];
 
 // Supabase access tokens expire in 1 hour.
 // We refresh 5 minutes before expiry to keep the session alive silently.
-const REFRESH_MARGIN_MS = 5 * 60 * 1000; // 5 min
 const TOKEN_TTL_MS = 55 * 60 * 1000; // refresh every 55 min
 
 // ─── Context ───────────────────────────────────────────────────────────────
@@ -58,6 +56,7 @@ async function authFetch<T>(path: string, body: unknown, token?: string | null):
     method: "POST",
     headers,
     body: JSON.stringify(body),
+    credentials: "include",
   });
 
   const data = await res.json();
@@ -87,98 +86,90 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const clearState = useCallback(() => {
     if (refreshTimerRef.current) clearTimeout(refreshTimerRef.current);
-    localStorage.removeItem(TOKEN_KEY);
-    localStorage.removeItem(REFRESH_KEY);
-    localStorage.removeItem(USER_KEY);
+    setAccessToken(null);
+    for (const key of LEGACY_TOKEN_KEYS) localStorage.removeItem(key);
     setState({ user: null, accessToken: null, isLoading: false });
   }, []);
 
   // Schedules a silent token refresh TOKEN_TTL_MS from now
-  const scheduleRefresh = useCallback(
-    (refreshToken: string) => {
-      if (refreshTimerRef.current) clearTimeout(refreshTimerRef.current);
-      refreshTimerRef.current = setTimeout(async () => {
-        try {
-          const data = await authFetch<{ accessToken: string; refreshToken: string }>(
-            "/auth/refresh",
-            { refreshToken },
-          );
-          localStorage.setItem(TOKEN_KEY, data.accessToken);
-          localStorage.setItem(REFRESH_KEY, data.refreshToken);
-          setState((s) => ({ ...s, accessToken: data.accessToken }));
-          scheduleRefresh(data.refreshToken); // chain the next refresh
-        } catch {
-          // Refresh token expired — force logout
-          clearState();
-        }
-      }, TOKEN_TTL_MS);
-    },
-    [clearState],
-  );
+  const scheduleRefresh = useCallback(() => {
+    if (refreshTimerRef.current) clearTimeout(refreshTimerRef.current);
+    refreshTimerRef.current = setTimeout(async () => {
+      try {
+        const data = await authFetch<{ accessToken: string }>("/auth/refresh", {});
+        setAccessToken(data.accessToken);
+        setState((s) => ({ ...s, accessToken: data.accessToken }));
+        scheduleRefresh();
+      } catch {
+        // Refresh token expired — force logout
+        clearState();
+      }
+    }, TOKEN_TTL_MS);
+  }, [clearState]);
 
   const persist = useCallback(
-    (user: AuthUser, accessToken: string, refreshToken: string) => {
-      localStorage.setItem(TOKEN_KEY, accessToken);
-      localStorage.setItem(REFRESH_KEY, refreshToken);
-      localStorage.setItem(USER_KEY, JSON.stringify(user));
+    (user: AuthUser, accessToken: string) => {
+      setAccessToken(accessToken);
       setState({ user, accessToken, isLoading: false });
-      scheduleRefresh(refreshToken);
+      scheduleRefresh();
     },
     [scheduleRefresh],
   );
 
-  // Hydrate from localStorage on mount + kick off refresh timer
+  // Restore the session from the HttpOnly refresh cookie.
   useEffect(() => {
-    try {
-      const storedToken = localStorage.getItem(TOKEN_KEY);
-      const storedRefresh = localStorage.getItem(REFRESH_KEY);
-      const storedUser = localStorage.getItem(USER_KEY);
+    let cancelled = false;
+    for (const key of LEGACY_TOKEN_KEYS) localStorage.removeItem(key);
 
-      if (storedToken && storedRefresh && storedUser) {
-        const user = JSON.parse(storedUser) as AuthUser;
-        setState({ user, accessToken: storedToken, isLoading: false });
-        // Schedule refresh immediately — we don't know how old the stored token is
-        scheduleRefresh(storedRefresh);
-        return;
+    void (async () => {
+      try {
+        const refreshed = await authFetch<{ accessToken: string }>("/auth/refresh", {});
+        const me = await fetch(`${API_URL}/auth/me`, {
+          headers: { Authorization: `Bearer ${refreshed.accessToken}` },
+          credentials: "include",
+        });
+        if (!me.ok) throw new Error("Session user unavailable");
+        const { user } = (await me.json()) as { user: AuthUser };
+        if (!cancelled) persist(user, refreshed.accessToken);
+      } catch {
+        if (!cancelled) clearState();
       }
-    } catch {
-      localStorage.removeItem(TOKEN_KEY);
-      localStorage.removeItem(REFRESH_KEY);
-      localStorage.removeItem(USER_KEY);
-    }
-    setState((s) => ({ ...s, isLoading: false }));
+    })();
 
     return () => {
+      cancelled = true;
       if (refreshTimerRef.current) clearTimeout(refreshTimerRef.current);
     };
-  }, [scheduleRefresh]);
+  }, [clearState, persist]);
 
   // ── Auth actions ──────────────────────────────────────────────────────────
 
   const login = useCallback(
     async (email: string, password: string) => {
-      const data = await authFetch<{ user: AuthUser; accessToken: string; refreshToken: string }>(
-        "/auth/login",
-        { email, password },
-      );
-      persist(data.user, data.accessToken, data.refreshToken);
+      const data = await authFetch<{ user: AuthUser; accessToken: string }>("/auth/login", {
+        email,
+        password,
+      });
+      persist(data.user, data.accessToken);
     },
     [persist],
   );
 
   const register = useCallback(
     async (email: string, password: string, firstName: string, lastName: string) => {
-      const data = await authFetch<{ user: AuthUser; accessToken: string; refreshToken: string }>(
-        "/auth/register",
-        { email, password, firstName, lastName },
-      );
-      persist(data.user, data.accessToken, data.refreshToken);
+      const data = await authFetch<{ user: AuthUser; accessToken: string }>("/auth/register", {
+        email,
+        password,
+        firstName,
+        lastName,
+      });
+      persist(data.user, data.accessToken);
     },
     [persist],
   );
 
   const logout = useCallback(async () => {
-    const token = localStorage.getItem(TOKEN_KEY);
+    const token = getAccessToken();
     if (token) {
       await authFetch("/auth/logout", {}, token).catch(() => {});
     }

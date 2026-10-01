@@ -23,5 +23,5 @@ authRouter.post("/register", authLimiter, register);
 authRouter.post("/refresh", authLimiter, refreshToken);
 
 // Protected routes — valid JWT required (no rate limit needed, token already gates access)
-authRouter.post("/logout", requireAuth, logout);
+authRouter.post("/logout", logout);
 authRouter.get("/me", requireAuth, me);

@@ -100,6 +100,7 @@ import {
   getCategories,
   type AdminOrder,
   type AdminProduct,
+  type AdminProductInput,
   type AdminCustomer,
   type AdminStaffMember,
   type AdminStats,
@@ -110,20 +111,19 @@ import {
   type AdminCoupon,
   type BlogPost,
   type PaymentGateway,
-  type PaymentGatewayFull,
   type CreatePaymentGatewayRequest,
   type GatewayType,
   type PayPalMode,
 } from "@/lib/api-client";
 import { QueriesList } from "@/components/admin/queries/QueriesList";
 import { ConversationDetail } from "@/components/admin/queries/ConversationDetail";
+import { getAccessToken } from "@/lib/auth-session";
+import { errorMessage } from "@/lib/utils";
 
 // ─── Admin reviews API (not yet in api-client — called directly) ───────────
 const API_URL = import.meta.env.VITE_API_URL ?? "http://localhost:4000/api";
-const TOKEN_KEY = "ch-access-token";
-
 async function adminFetch<T>(path: string, options: RequestInit = {}): Promise<T> {
-  const token = typeof window !== "undefined" ? localStorage.getItem(TOKEN_KEY) : null;
+  const token = getAccessToken();
   const res = await fetch(`${API_URL}${path}`, {
     ...options,
     headers: {
@@ -203,7 +203,9 @@ function AdminDashboard() {
   // Filter sidebar based on role — product_manager only sees: overview, orders, products, queries
   const items =
     user?.role === "product_manager"
-      ? allItems.filter((i) => ["overview", "orders", "products", "queries", "logout"].includes(i.key))
+      ? allItems.filter((i) =>
+          ["overview", "orders", "products", "queries", "logout"].includes(i.key),
+        )
       : allItems;
 
   const titles: Record<Tab, string> = {
@@ -285,8 +287,8 @@ function Overview() {
       setDist(serRes.distribution);
       setOrders(ordRes.orders);
       setProds(prodRes.products);
-    } catch (e: any) {
-      toast.error(e.message ?? "Failed to load overview");
+    } catch (e: unknown) {
+      toast.error(errorMessage(e, "Failed to load overview"));
     } finally {
       setLoading(false);
     }
@@ -430,7 +432,7 @@ function Overview() {
                     <td className="py-2.5 pr-3">{o.customerName ?? o.customerEmail ?? "Guest"}</td>
                     <td className="py-2.5 pr-3">{o.createdAt.slice(0, 10)}</td>
                     <td className="py-2.5 pr-3">
-                      <StatusBadge status={o.status as any} />
+                      <StatusBadge status={o.status} />
                     </td>
                     <td className="py-2.5 font-semibold">${o.total.toFixed(2)}</td>
                   </tr>
@@ -468,8 +470,8 @@ function OrdersPage() {
       if (payFilter === "Unpaid") rows = rows.filter((o) => o.paymentStatus !== "paid");
       setOrders(rows);
       setTotal(res.total);
-    } catch (e: any) {
-      toast.error(e.message);
+    } catch (e: unknown) {
+      toast.error(errorMessage(e, "Failed to load orders"));
     } finally {
       setLoading(false);
     }
@@ -485,8 +487,8 @@ function OrdersPage() {
       setOrders((prev) => prev.map((o) => (o.id === id ? { ...o, status } : o)));
       if (detail?.id === id) setDetail((d) => (d ? { ...d, status } : d));
       toast.success(`Status → ${status}`);
-    } catch (e: any) {
-      toast.error(e.message);
+    } catch (e: unknown) {
+      toast.error(errorMessage(e, "Failed to update order status"));
     }
   };
 
@@ -496,8 +498,8 @@ function OrdersPage() {
       setOrders((prev) => prev.map((o) => (o.id === id ? { ...o, paymentStatus: "paid" } : o)));
       if (detail?.id === id) setDetail((d) => (d ? { ...d, paymentStatus: "paid" } : d));
       toast.success("Order marked as paid");
-    } catch (e: any) {
-      toast.error(e.message);
+    } catch (e: unknown) {
+      toast.error(errorMessage(e, "Failed to update payment status"));
     }
   };
 
@@ -579,7 +581,7 @@ function OrdersPage() {
                         </td>
                         <td className="py-2.5 sm:py-3 pr-2 sm:pr-3">{o.createdAt.slice(0, 10)}</td>
                         <td className="py-2.5 sm:py-3 pr-2 sm:pr-3">
-                          <StatusBadge status={o.status as any} />
+                          <StatusBadge status={o.status} />
                         </td>
                         <td className="py-2.5 sm:py-3 pr-2 sm:pr-3">
                           <PaymentBadge status={o.paymentStatus === "paid" ? "Paid" : "Unpaid"} />
@@ -664,7 +666,7 @@ function OrdersPage() {
                 <div className="flex flex-wrap gap-2 justify-between items-center">
                   <span>{detail.customerName ?? detail.customerEmail ?? "Guest"}</span>
                   <div className="flex gap-2">
-                    <StatusBadge status={detail.status as any} />
+                    <StatusBadge status={detail.status} />
                     <PaymentBadge status={detail.paymentStatus === "paid" ? "Paid" : "Unpaid"} />
                   </div>
                 </div>
@@ -783,8 +785,8 @@ function ProductsPage() {
       ]);
       setItems(prodRes.products);
       setCats(catRes);
-    } catch (e: any) {
-      toast.error(e.message);
+    } catch (e: unknown) {
+      toast.error(errorMessage(e, "Failed to load products"));
     } finally {
       setLoading(false);
     }
@@ -800,21 +802,22 @@ function ProductsPage() {
       (q === "" || p.name.toLowerCase().includes(q.toLowerCase())),
   );
 
-  const saveProduct = async (data: Partial<AdminProduct> & { id?: string }) => {
+  const saveProduct = async (data: AdminProductInput & { id?: string }) => {
+    const { id, ...payload } = data;
     try {
-      if (data.id) {
-        const res = await adminUpdateProduct(data.id, data as any);
-        setItems((prev) => prev.map((p) => (p.id === data.id ? res.product : p)));
+      if (id) {
+        const res = await adminUpdateProduct(id, payload);
+        setItems((prev) => prev.map((p) => (p.id === id ? res.product : p)));
         toast.success("Product updated");
       } else {
-        const res = await adminCreateProduct(data as any);
+        const res = await adminCreateProduct(payload);
         setItems((prev) => [res.product, ...prev]);
         toast.success("Product created");
       }
       setEditing(null);
       setAdding(false);
-    } catch (e: any) {
-      toast.error(e.message);
+    } catch (e: unknown) {
+      toast.error(errorMessage(e, "Failed to save product"));
     }
   };
 
@@ -824,8 +827,8 @@ function ProductsPage() {
       setItems((prev) => prev.filter((p) => p.id !== id));
       toast.success("Product deactivated");
       setToDelete(null);
-    } catch (e: any) {
-      toast.error(e.message);
+    } catch (e: unknown) {
+      toast.error(errorMessage(e, "Failed to deactivate product"));
     }
   };
 
@@ -913,8 +916,8 @@ function ProductsPage() {
                               setItems((prev) =>
                                 prev.map((x) => (x.id === p.id ? { ...x, isActive: v } : x)),
                               );
-                            } catch (e: any) {
-                              toast.error(e.message);
+                            } catch (e: unknown) {
+                              toast.error(errorMessage(e, "Failed to update product"));
                             }
                           }}
                         />
@@ -973,6 +976,22 @@ function ProductsPage() {
   );
 }
 
+const EMPTY_PRODUCT_FORM: AdminProductInput = {
+  name: "",
+  slug: "",
+  description: "",
+  price: 0,
+  primaryImageUrl: "",
+  imageUrls: [],
+  stockQuantity: 0,
+  isActive: true,
+  compareAtPrice: null,
+  sku: "",
+  brand: "CutHaven",
+  categoryId: null,
+  availability: "in_stock",
+};
+
 function ProductDialog({
   open,
   onClose,
@@ -983,35 +1002,25 @@ function ProductDialog({
   open: boolean;
   onClose: () => void;
   initial: AdminProduct | null;
-  onSave: (d: any) => Promise<void>;
+  onSave: (data: AdminProductInput & { id?: string }) => Promise<void>;
   categories: ApiCategory[];
 }) {
-  const blank = {
-    name: "",
-    slug: "",
-    description: "",
-    price: 0,
-    primaryImageUrl: "",
-    imageUrls: [] as string[],
-    stockQuantity: 0,
-    isActive: true,
-    compareAtPrice: null,
-    sku: "",
-    brand: "CutHaven",
-    categoryId: null,
-    availability: "in_stock" as const,
-  };
-  const [form, setForm] = useState<any>(initial ?? blank);
+  const [form, setForm] = useState<AdminProductInput & { id?: string }>(
+    initial ?? EMPTY_PRODUCT_FORM,
+  );
   const [uploadingPrimary, setUploadingPrimary] = useState(false);
   const [uploadingExtra, setUploadingExtra] = useState(false);
 
   useEffect(() => {
     if (open) {
-      setForm(initial ? { ...initial, imageUrls: initial.imageUrls ?? [] } : { ...blank });
+      setForm(
+        initial ? { ...initial, imageUrls: initial.imageUrls ?? [] } : { ...EMPTY_PRODUCT_FORM },
+      );
     }
   }, [initial, open]);
 
-  const upd = (k: string, v: any) => setForm((f: any) => ({ ...f, [k]: v }));
+  const upd = <Key extends keyof AdminProductInput>(key: Key, value: AdminProductInput[Key]) =>
+    setForm((current) => ({ ...current, [key]: value }));
   const genSlug = (n: string) =>
     n
       .toLowerCase()
@@ -1019,13 +1028,11 @@ function ProductDialog({
       .replace(/^-|-$/g, "");
 
   const API_URL = import.meta.env.VITE_API_URL ?? "http://localhost:4000/api";
-  const TOKEN_KEY = "ch-access-token";
-
   // Upload a single file — returns the public URL
   const uploadFile = async (file: File): Promise<string> => {
     const fd = new FormData();
     fd.append("file", file);
-    const token = localStorage.getItem(TOKEN_KEY);
+    const token = getAccessToken();
     const res = await fetch(`${API_URL}/upload/product-image`, {
       method: "POST",
       headers: token ? { Authorization: `Bearer ${token}` } : {},
@@ -1045,8 +1052,8 @@ function ProductDialog({
       const url = await uploadFile(file);
       upd("primaryImageUrl", url);
       toast.success("Primary image uploaded");
-    } catch (err: any) {
-      toast.error(err.message ?? "Upload failed");
+    } catch (err: unknown) {
+      toast.error(errorMessage(err, "Upload failed"));
     } finally {
       setUploadingPrimary(false);
       e.target.value = "";
@@ -1060,10 +1067,10 @@ function ProductDialog({
     setUploadingExtra(true);
     try {
       const urls = await Promise.all(files.map(uploadFile));
-      setForm((f: any) => ({ ...f, imageUrls: [...(f.imageUrls ?? []), ...urls] }));
+      setForm((current) => ({ ...current, imageUrls: [...current.imageUrls, ...urls] }));
       toast.success(`${urls.length} image${urls.length > 1 ? "s" : ""} uploaded`);
-    } catch (err: any) {
-      toast.error(err.message ?? "Upload failed");
+    } catch (err: unknown) {
+      toast.error(errorMessage(err, "Upload failed"));
     } finally {
       setUploadingExtra(false);
       e.target.value = "";
@@ -1071,9 +1078,9 @@ function ProductDialog({
   };
 
   const removeExtraImage = (idx: number) => {
-    setForm((f: any) => ({
-      ...f,
-      imageUrls: f.imageUrls.filter((_: string, i: number) => i !== idx),
+    setForm((current) => ({
+      ...current,
+      imageUrls: current.imageUrls.filter((_, imageIndex) => imageIndex !== idx),
     }));
   };
 
@@ -1347,7 +1354,10 @@ function CustomersPage() {
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
   const [q, setQ] = useState("");
-  const [detail, setDetail] = useState<{ customer: AdminCustomer; orders: any[] } | null>(null);
+  const [detail, setDetail] = useState<{
+    customer: AdminCustomer;
+    orders: AdminOrder[];
+  } | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
 
   const load = useCallback(async () => {
@@ -1356,8 +1366,8 @@ function CustomersPage() {
       const res = await adminGetCustomers({ search: q || undefined, limit: 100 });
       setCustomers(res.customers);
       setTotal(res.total);
-    } catch (e: any) {
-      toast.error(e.message);
+    } catch (e: unknown) {
+      toast.error(errorMessage(e, "Failed to load customers"));
     } finally {
       setLoading(false);
     }
@@ -1365,15 +1375,15 @@ function CustomersPage() {
 
   useEffect(() => {
     load();
-  }, []);
+  }, [load]);
 
   const viewCustomer = async (id: string) => {
     setDetailLoading(true);
     try {
       const res = await adminGetCustomerById(id);
-      setDetail(res as any);
-    } catch (e: any) {
-      toast.error(e.message);
+      setDetail(res);
+    } catch (e: unknown) {
+      toast.error(errorMessage(e, "Failed to load customer"));
     } finally {
       setDetailLoading(false);
     }
@@ -1480,12 +1490,12 @@ function CustomersPage() {
                           </tr>
                         </thead>
                         <tbody>
-                          {detail.orders.slice(0, 10).map((o: any) => (
-                            <tr key={o.id} className="border-b border-border">
-                              <td className="py-2 font-mono">{o.order_number}</td>
-                              <td className="py-2">{o.created_at?.slice(0, 10)}</td>
-                              <td className="py-2 capitalize">{o.status}</td>
-                              <td className="py-2 font-semibold">${Number(o.total).toFixed(2)}</td>
+                          {detail.orders.slice(0, 10).map((order) => (
+                            <tr key={order.id} className="border-b border-border">
+                              <td className="py-2 font-mono">{order.orderNumber}</td>
+                              <td className="py-2">{order.createdAt.slice(0, 10)}</td>
+                              <td className="py-2 capitalize">{order.status}</td>
+                              <td className="py-2 font-semibold">${order.total.toFixed(2)}</td>
                             </tr>
                           ))}
                         </tbody>
@@ -1525,8 +1535,8 @@ function ManagersPage() {
       toast.success("Store manager added");
       setForm({ firstName: "", lastName: "", email: "", password: "" });
       setAdding(false);
-    } catch (err: any) {
-      toast.error(err.message);
+    } catch (err: unknown) {
+      toast.error(errorMessage(err, "Failed to create staff member"));
     }
   };
 
@@ -1534,8 +1544,8 @@ function ManagersPage() {
     try {
       await adminToggleStaff(id, isActive);
       setStaff((p) => p.map((s) => (s.id === id ? { ...s, isActive } : s)));
-    } catch (err: any) {
-      toast.error(err.message);
+    } catch (err: unknown) {
+      toast.error(errorMessage(err, "Failed to update staff member"));
     }
   };
 
@@ -1702,8 +1712,8 @@ function BlogPage() {
       const res = await adminUpdateBlogPost(post.id, { isPublished: !post.isPublished });
       setPosts((p) => p.map((x) => (x.id === post.id ? res.post : x)));
       toast.success(!post.isPublished ? "Post published" : "Post set to draft");
-    } catch (e: any) {
-      toast.error(e.message);
+    } catch (e: unknown) {
+      toast.error(errorMessage(e, "Failed to update blog post"));
     }
   };
 
@@ -1713,8 +1723,8 @@ function BlogPage() {
       setPosts((p) => p.filter((x) => x.id !== id));
       toast.success("Post deleted");
       setToDelete(null);
-    } catch (e: any) {
-      toast.error(e.message);
+    } catch (e: unknown) {
+      toast.error(errorMessage(e, "Failed to delete blog post"));
     }
   };
 
@@ -1842,6 +1852,23 @@ function BlogPage() {
   );
 }
 
+type BlogForm = Pick<
+  BlogPost,
+  "title" | "slug" | "excerpt" | "content" | "category" | "author" | "readTime" | "isPublished"
+> & { imageUrl: string };
+
+const EMPTY_BLOG_FORM: BlogForm = {
+  title: "",
+  slug: "",
+  excerpt: "",
+  content: "",
+  category: "General",
+  author: "CutHaven Team",
+  imageUrl: "",
+  readTime: "5 min read",
+  isPublished: false,
+};
+
 function BlogPostDialog({
   open,
   onClose,
@@ -1853,18 +1880,7 @@ function BlogPostDialog({
   initial: BlogPost | null;
   onSaved: (post: BlogPost, isNew: boolean) => void;
 }) {
-  const blank = {
-    title: "",
-    slug: "",
-    excerpt: "",
-    content: "",
-    category: "General",
-    author: "CutHaven Team",
-    imageUrl: "",
-    readTime: "5 min read",
-    isPublished: false,
-  };
-  const [form, setForm] = useState<any>({ ...blank });
+  const [form, setForm] = useState<BlogForm>({ ...EMPTY_BLOG_FORM });
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
@@ -1882,12 +1898,13 @@ function BlogPostDialog({
               readTime: initial.readTime,
               isPublished: initial.isPublished,
             }
-          : { ...blank },
+          : { ...EMPTY_BLOG_FORM },
       );
     }
   }, [open, initial]);
 
-  const upd = (k: string, v: any) => setForm((f: any) => ({ ...f, [k]: v }));
+  const upd = <Key extends keyof BlogForm>(key: Key, value: BlogForm[Key]) =>
+    setForm((current) => ({ ...current, [key]: value }));
   const genSlug = (t: string) =>
     t
       .toLowerCase()
@@ -1914,8 +1931,8 @@ function BlogPostDialog({
         const res = await adminCreateBlogPost(payload);
         onSaved(res.post, true);
       }
-    } catch (e: any) {
-      toast.error(e.message);
+    } catch (e: unknown) {
+      toast.error(errorMessage(e, "Failed to save blog post"));
     } finally {
       setSaving(false);
     }
@@ -2056,8 +2073,8 @@ function ReviewsPage() {
       const qs = f === "all" ? "" : `?approved=${f === "approved"}`;
       const data = await adminFetch<{ reviews: AdminReview[] }>(`/admin/reviews${qs}`);
       setReviews(data.reviews);
-    } catch (e: any) {
-      toast.error(e.message);
+    } catch (e: unknown) {
+      toast.error(errorMessage(e, "Failed to load reviews"));
     } finally {
       setLoading(false);
     }
@@ -2078,8 +2095,8 @@ function ReviewsPage() {
       toast.success(
         isApproved ? "Review approved — now visible on product page" : "Review rejected",
       );
-    } catch (e: any) {
-      toast.error(e.message);
+    } catch (e: unknown) {
+      toast.error(errorMessage(e, "Failed to update review"));
     }
   };
 
@@ -2379,8 +2396,8 @@ function CouponsPage() {
       setCoupons((p) => p.filter((c) => c.id !== id));
       toast.success("Coupon deleted");
       setToDelete(null);
-    } catch (e: any) {
-      toast.error(e.message);
+    } catch (e: unknown) {
+      toast.error(errorMessage(e, "Failed to delete coupon"));
     }
   };
 
@@ -2388,8 +2405,8 @@ function CouponsPage() {
     try {
       const res = await adminUpdateCoupon(c.id, { isActive: !c.is_active });
       setCoupons((p) => p.map((x) => (x.id === c.id ? res.coupon : x)));
-    } catch (e: any) {
-      toast.error(e.message);
+    } catch (e: unknown) {
+      toast.error(errorMessage(e, "Failed to update coupon"));
     }
   };
 
@@ -2528,6 +2545,26 @@ function CouponsPage() {
   );
 }
 
+interface CouponForm {
+  code: string;
+  discountType: "percentage" | "fixed";
+  discountValue: number;
+  minOrderAmount: string;
+  maxUses: string;
+  validUntil: string;
+  isActive: boolean;
+}
+
+const EMPTY_COUPON_FORM: CouponForm = {
+  code: "",
+  discountType: "percentage",
+  discountValue: 10,
+  minOrderAmount: "",
+  maxUses: "",
+  validUntil: "",
+  isActive: true,
+};
+
 function CouponDialog({
   open,
   onClose,
@@ -2539,16 +2576,7 @@ function CouponDialog({
   initial: AdminCoupon | null;
   onSaved: (coupon: AdminCoupon, isNew: boolean) => void;
 }) {
-  const blank = {
-    code: "",
-    discountType: "percentage" as "percentage" | "fixed",
-    discountValue: 10,
-    minOrderAmount: "",
-    maxUses: "",
-    validUntil: "",
-    isActive: true,
-  };
-  const [form, setForm] = useState({ ...blank });
+  const [form, setForm] = useState<CouponForm>({ ...EMPTY_COUPON_FORM });
   const [saving, setSaving] = useState(false);
 
   // Reset form whenever dialog opens with a different initial value
@@ -2566,12 +2594,13 @@ function CouponDialog({
               validUntil: initial.valid_until ? initial.valid_until.slice(0, 10) : "",
               isActive: initial.is_active,
             }
-          : { ...blank },
+          : { ...EMPTY_COUPON_FORM },
       );
     }
   }, [open, initial]);
 
-  const upd = (k: keyof typeof form, v: any) => setForm((f) => ({ ...f, [k]: v }));
+  const upd = <Key extends keyof CouponForm>(key: Key, value: CouponForm[Key]) =>
+    setForm((current) => ({ ...current, [key]: value }));
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -2607,8 +2636,8 @@ function CouponDialog({
         const res = await adminCreateCoupon(payload);
         onSaved(res.coupon, true);
       }
-    } catch (e: any) {
-      toast.error(e.message);
+    } catch (e: unknown) {
+      toast.error(errorMessage(e, "Failed to save coupon"));
     } finally {
       setSaving(false);
     }
@@ -2651,7 +2680,7 @@ function CouponDialog({
               </label>
               <select
                 value={form.discountType}
-                onChange={(e) => upd("discountType", e.target.value)}
+                onChange={(e) => upd("discountType", e.target.value as CouponForm["discountType"])}
                 className="w-full px-3 py-2 rounded-lg border border-border text-sm bg-surface focus:outline-none focus:border-primary"
               >
                 <option value="percentage">Percentage (%)</option>
@@ -2671,7 +2700,7 @@ function CouponDialog({
                 min="0.01"
                 max={form.discountType === "percentage" ? 100 : undefined}
                 value={form.discountValue}
-                onChange={(e) => upd("discountValue", e.target.value)}
+                onChange={(e) => upd("discountValue", Number(e.target.value))}
                 className="w-full px-3 py-2 rounded-lg border border-border text-sm focus:outline-none focus:border-primary"
                 required
               />
@@ -2784,6 +2813,11 @@ function SettingsPage() {
   });
   const [ship, setShip] = useState({ freeThreshold: 350, flatRate: 9.99 });
   const [notif, setNotif] = useState({ newOrder: true, lowStock: true, weekly: false });
+  const notificationOptions: { key: keyof typeof notif; label: string }[] = [
+    { key: "newOrder", label: "Email on new order" },
+    { key: "lowStock", label: "Email on low stock" },
+    { key: "weekly", label: "Weekly summary" },
+  ];
   return (
     <div className="space-y-4">
       <DashCard>
@@ -2871,16 +2905,12 @@ function SettingsPage() {
       <DashCard>
         <h3 className="font-display text-lg font-bold mb-4">Notifications</h3>
         <div className="space-y-3">
-          {[
-            { k: "newOrder", l: "Email on new order" },
-            { k: "lowStock", l: "Email on low stock" },
-            { k: "weekly", l: "Weekly summary" },
-          ].map((n) => (
-            <label key={n.k} className="flex items-center justify-between">
-              <span className="text-sm">{n.l}</span>
+          {notificationOptions.map((option) => (
+            <label key={option.key} className="flex items-center justify-between">
+              <span className="text-sm">{option.label}</span>
               <Switch
-                checked={(notif as any)[n.k]}
-                onCheckedChange={(v) => setNotif({ ...notif, [n.k]: v })}
+                checked={notif[option.key]}
+                onCheckedChange={(value) => setNotif({ ...notif, [option.key]: value })}
               />
             </label>
           ))}
@@ -2906,8 +2936,8 @@ function GatewaysPage() {
     try {
       const data = await adminGetPaymentGateways();
       setGateways(data);
-    } catch (err: any) {
-      setError(err.message ?? "Failed to load gateways");
+    } catch (err: unknown) {
+      setError(errorMessage(err, "Failed to load gateways"));
     } finally {
       setLoading(false);
     }
@@ -2922,8 +2952,8 @@ function GatewaysPage() {
       await adminActivatePaymentGateway(id);
       toast.success("Gateway activated");
       load();
-    } catch (err: any) {
-      toast.error(err.message ?? "Failed to activate gateway");
+    } catch (err: unknown) {
+      toast.error(errorMessage(err, "Failed to activate gateway"));
     }
   };
 
@@ -2933,8 +2963,8 @@ function GatewaysPage() {
       toast.success("Gateway deleted");
       setDeleteConfirm(null);
       load();
-    } catch (err: any) {
-      toast.error(err.message ?? "Failed to delete gateway");
+    } catch (err: unknown) {
+      toast.error(errorMessage(err, "Failed to delete gateway"));
     }
   };
 
@@ -3163,6 +3193,7 @@ function GatewayFormDialog({ gatewayId, onClose, onSuccess }: GatewayFormDialogP
   const [paypalClientId, setPaypalClientId] = useState("");
   const [paypalClientSecret, setPaypalClientSecret] = useState("");
   const [paypalMode, setPaypalMode] = useState<PayPalMode>("live");
+  const [credentialHints, setCredentialHints] = useState<PaymentGateway | null>(null);
 
   // Load existing gateway for editing
   useEffect(() => {
@@ -3173,14 +3204,15 @@ function GatewayFormDialog({ gatewayId, onClose, onSuccess }: GatewayFormDialogP
           setGatewayType(g.gatewayType);
           setAccountName(g.accountName);
           setIsActive(g.isActive);
+          setCredentialHints(g);
 
           if (g.gatewayType === "stripe") {
-            setStripeSecretKey(g.stripeSecretKey ?? "");
-            setStripePublishableKey(g.stripePublishableKey ?? "");
-            setStripeWebhookSecret(g.stripeWebhookSecret ?? "");
+            setStripeSecretKey("");
+            setStripePublishableKey("");
+            setStripeWebhookSecret("");
           } else {
-            setPaypalClientId(g.paypalClientId ?? "");
-            setPaypalClientSecret(g.paypalClientSecret ?? "");
+            setPaypalClientId("");
+            setPaypalClientSecret("");
             setPaypalMode((g.paypalMode as PayPalMode) ?? "live");
           }
         })
@@ -3200,42 +3232,48 @@ function GatewayFormDialog({ gatewayId, onClose, onSuccess }: GatewayFormDialogP
       const baseData = { accountName, isActive };
 
       if (gatewayType === "stripe") {
-        const data: CreatePaymentGatewayRequest = {
-          gatewayType: "stripe",
-          ...baseData,
-          stripeSecretKey,
-          stripePublishableKey,
-          stripeWebhookSecret,
-        };
-
         if (gatewayId) {
-          await adminUpdatePaymentGateway(gatewayId, data);
+          await adminUpdatePaymentGateway(gatewayId, {
+            ...baseData,
+            ...(stripeSecretKey && { stripeSecretKey }),
+            ...(stripePublishableKey && { stripePublishableKey }),
+            ...(stripeWebhookSecret && { stripeWebhookSecret }),
+          });
           toast.success("Gateway updated");
         } else {
-          await adminCreatePaymentGateway(data);
+          await adminCreatePaymentGateway({
+            gatewayType: "stripe",
+            ...baseData,
+            stripeSecretKey,
+            stripePublishableKey,
+            stripeWebhookSecret,
+          });
           toast.success("Gateway created");
         }
       } else {
-        const data: CreatePaymentGatewayRequest = {
-          gatewayType: "paypal",
-          ...baseData,
-          paypalClientId,
-          paypalClientSecret,
-          paypalMode,
-        };
-
         if (gatewayId) {
-          await adminUpdatePaymentGateway(gatewayId, data);
+          await adminUpdatePaymentGateway(gatewayId, {
+            ...baseData,
+            ...(paypalClientId && { paypalClientId }),
+            ...(paypalClientSecret && { paypalClientSecret }),
+            paypalMode,
+          });
           toast.success("Gateway updated");
         } else {
-          await adminCreatePaymentGateway(data);
+          await adminCreatePaymentGateway({
+            gatewayType: "paypal",
+            ...baseData,
+            paypalClientId,
+            paypalClientSecret,
+            paypalMode,
+          });
           toast.success("Gateway created");
         }
       }
 
       onSuccess();
-    } catch (err: any) {
-      toast.error(err.message ?? "Failed to save gateway");
+    } catch (err: unknown) {
+      toast.error(errorMessage(err, "Failed to save gateway"));
     } finally {
       setLoading(false);
     }
@@ -3300,8 +3338,8 @@ function GatewayFormDialog({ gatewayId, onClose, onSuccess }: GatewayFormDialogP
                   type="password"
                   value={stripeSecretKey}
                   onChange={(e) => setStripeSecretKey(e.target.value)}
-                  placeholder="sk_live_..."
-                  required
+                  placeholder={credentialHints?.stripeSecretKey ?? "sk_live_..."}
+                  required={!gatewayId}
                   className="w-full px-3 py-2 rounded-lg border border-border bg-background focus:outline-none focus:border-primary font-mono text-sm"
                 />
               </div>
@@ -3312,8 +3350,8 @@ function GatewayFormDialog({ gatewayId, onClose, onSuccess }: GatewayFormDialogP
                   type="text"
                   value={stripePublishableKey}
                   onChange={(e) => setStripePublishableKey(e.target.value)}
-                  placeholder="pk_live_..."
-                  required
+                  placeholder={credentialHints?.stripePublishableKey ?? "pk_live_..."}
+                  required={!gatewayId}
                   className="w-full px-3 py-2 rounded-lg border border-border bg-background focus:outline-none focus:border-primary font-mono text-sm"
                 />
               </div>
@@ -3324,8 +3362,8 @@ function GatewayFormDialog({ gatewayId, onClose, onSuccess }: GatewayFormDialogP
                   type="password"
                   value={stripeWebhookSecret}
                   onChange={(e) => setStripeWebhookSecret(e.target.value)}
-                  placeholder="whsec_..."
-                  required
+                  placeholder={credentialHints?.stripeWebhookSecret ?? "whsec_..."}
+                  required={!gatewayId}
                   className="w-full px-3 py-2 rounded-lg border border-border bg-background focus:outline-none focus:border-primary font-mono text-sm"
                 />
               </div>
@@ -3341,8 +3379,8 @@ function GatewayFormDialog({ gatewayId, onClose, onSuccess }: GatewayFormDialogP
                   type="text"
                   value={paypalClientId}
                   onChange={(e) => setPaypalClientId(e.target.value)}
-                  placeholder="AXxxx..."
-                  required
+                  placeholder={credentialHints?.paypalClientId ?? "AXxxx..."}
+                  required={!gatewayId}
                   className="w-full px-3 py-2 rounded-lg border border-border bg-background focus:outline-none focus:border-primary font-mono text-sm"
                 />
               </div>
@@ -3353,8 +3391,8 @@ function GatewayFormDialog({ gatewayId, onClose, onSuccess }: GatewayFormDialogP
                   type="password"
                   value={paypalClientSecret}
                   onChange={(e) => setPaypalClientSecret(e.target.value)}
-                  placeholder="EYxxx..."
-                  required
+                  placeholder={credentialHints?.paypalClientSecret ?? "EYxxx..."}
+                  required={!gatewayId}
                   className="w-full px-3 py-2 rounded-lg border border-border bg-background focus:outline-none focus:border-primary font-mono text-sm"
                 />
               </div>

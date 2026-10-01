@@ -1,4 +1,4 @@
-// Mirrors the `products` table in cuthaven_db_schema.sql.
+// Mirrors the `products` table in the versioned Supabase migrations.
 // Keep this in sync whenever the schema changes.
 export interface Product {
   id: string;

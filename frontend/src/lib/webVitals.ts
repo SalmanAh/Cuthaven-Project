@@ -14,7 +14,8 @@ function sendToAnalytics(metric: Metric) {
   // Send to your analytics endpoint
   // Example: Google Analytics 4
   if (typeof window !== "undefined" && "gtag" in window) {
-    (window as any).gtag("event", metric.name, {
+    const { gtag } = window as Window & { gtag: (...args: unknown[]) => void };
+    gtag("event", metric.name, {
       value: Math.round(metric.name === "CLS" ? metric.value * 1000 : metric.value),
       metric_id: metric.id,
       metric_value: metric.value,

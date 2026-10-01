@@ -33,5 +33,30 @@ export const apiLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
   message: { error: "Too many requests. Please slow down." },
-  skipSuccessfulRequests: true,
+});
+
+// Creating a checkout reserves scarce stock and coupon capacity, so successful
+// anonymous requests must count too.
+export const checkoutCreateLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: isDev ? 100 : 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: "Too many checkout attempts. Please try again later." },
+});
+
+export const conversationCreateLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: isDev ? 100 : 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: "Too many chat creation attempts. Please try again later." },
+});
+
+export const conversationMessageLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: isDev ? 200 : 30,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: "Too many chat messages. Please slow down." },
 });

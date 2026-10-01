@@ -3,7 +3,7 @@ import test from "node:test";
 
 const { reconcileReservations } = await import("../dist/services/reservationReconciliation.service.js");
 
-const order = { id: "order-1", payment_transaction_id: "pi_1" };
+const order = { id: "order-1", payment_transaction_id: "pi_1", payment_gateway_id: "gateway-1" };
 
 function dependencies(status, calls) {
   return {

@@ -1,4 +1,4 @@
-import { lazy, ComponentType, Suspense, ReactNode } from "react";
+import { lazy, type ComponentType, Suspense, type ReactNode } from "react";
 
 interface LazyLoadOptions {
   fallback?: ReactNode;
@@ -12,8 +12,8 @@ interface LazyLoadOptions {
  * @example
  * const LazyCheckout = lazyLoad(() => import('./CheckoutForm'))
  */
-export function lazyLoad<T extends ComponentType<any>>(
-  importFunc: () => Promise<{ default: T }>,
+export function lazyLoad<Props extends object>(
+  importFunc: () => Promise<{ default: ComponentType<Props> }>,
   options: LazyLoadOptions = {},
 ) {
   const { fallback = <LoadingFallback />, delay = 0 } = options;
@@ -22,14 +22,14 @@ export function lazyLoad<T extends ComponentType<any>>(
   const delayedImport =
     delay > 0
       ? () =>
-          new Promise<{ default: T }>((resolve) => {
+          new Promise<{ default: ComponentType<Props> }>((resolve) => {
             setTimeout(() => importFunc().then(resolve), delay);
           })
       : importFunc;
 
   const LazyComponent = lazy(delayedImport);
 
-  return function LazyLoadedComponent(props: any) {
+  return function LazyLoadedComponent(props: Props) {
     return (
       <Suspense fallback={fallback}>
         <LazyComponent {...props} />
@@ -53,6 +53,6 @@ function LoadingFallback() {
  * Preload a lazy component
  * Call this on hover or other user interactions to improve perceived performance
  */
-export function preloadComponent(importFunc: () => Promise<any>) {
+export function preloadComponent<Result>(importFunc: () => Promise<Result>): Promise<Result> {
   return importFunc();
 }

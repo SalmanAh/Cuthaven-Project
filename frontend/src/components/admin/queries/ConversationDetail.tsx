@@ -9,10 +9,11 @@ import {
   type Message,
   type Conversation,
 } from "@/lib/queries-client";
+import { errorMessage } from "@/lib/utils";
 
 /**
  * ConversationDetail - Admin view of a single conversation
- * 
+ *
  * Features:
  * - Display all messages in conversation
  * - Polling for new messages (backend API only)
@@ -33,7 +34,7 @@ export function ConversationDetail({
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
   const [messageText, setMessageText] = useState("");
-  
+
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const pollingIntervalRef = useRef<NodeJS.Timeout | null>(null);
@@ -42,10 +43,10 @@ export function ConversationDetail({
   // Auto-scroll to bottom
   const scrollToBottom = useCallback(() => {
     if (messagesEndRef.current) {
-      messagesEndRef.current.scrollIntoView({ 
+      messagesEndRef.current.scrollIntoView({
         behavior: "smooth",
         block: "nearest",
-        inline: "nearest"
+        inline: "nearest",
       });
     }
   }, []);
@@ -57,14 +58,14 @@ export function ConversationDetail({
       const res = await getAdminConversationDetail(conversationId);
       setConversation(res.conversation);
       setMessages(res.messages);
-      
+
       // Mark as read by admin
       await markConversationAsReadByAdmin(conversationId);
-      
+
       // Scroll to bottom after loading
       setTimeout(scrollToBottom, 100);
-    } catch (err: any) {
-      toast.error(err.message ?? "Failed to load conversation");
+    } catch (err: unknown) {
+      toast.error(errorMessage(err, "Failed to load conversation"));
     } finally {
       setLoading(false);
     }
@@ -84,33 +85,33 @@ export function ConversationDetail({
 
       pollingIntervalRef.current = setInterval(async () => {
         if (!mounted) return;
-        
+
         try {
           const res = await getAdminConversationDetail(conversationId);
-          
+
           // Find messages newer than last fetch
-          const newMessages = res.messages.filter(m => 
-            new Date(m.created_at).getTime() > lastFetchTimeRef.current
+          const newMessages = res.messages.filter(
+            (m) => new Date(m.created_at).getTime() > lastFetchTimeRef.current,
           );
 
           if (newMessages.length > 0) {
             lastFetchTimeRef.current = Date.now();
-            
+
             setMessages((prev) => {
               const combined = [...prev];
-              newMessages.forEach(newMsg => {
-                if (!combined.some(m => m.id === newMsg.id)) {
+              newMessages.forEach((newMsg) => {
+                if (!combined.some((m) => m.id === newMsg.id)) {
                   combined.push(newMsg);
                 }
               });
-              return combined.sort((a, b) => 
-                new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+              return combined.sort(
+                (a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime(),
               );
             });
             setTimeout(scrollToBottom, 100);
           }
-        } catch (err) {
-          // Silently handle polling errors
+        } catch {
+          // Polling is best-effort; the next interval retries.
         }
       }, 5000); // Poll every 5 seconds
     };
@@ -135,12 +136,12 @@ export function ConversationDetail({
   // Send admin reply
   const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     if (!messageText.trim()) return;
-    
+
     try {
       setSending(true);
-      
+
       // Optimistic update
       const tempMessage: Message = {
         id: `temp-${Date.now()}`,
@@ -150,26 +151,24 @@ export function ConversationDetail({
         message: messageText,
         created_at: new Date().toISOString(),
       };
-      
+
       setMessages((prev) => [...prev, tempMessage]);
       setMessageText("");
-      
+
       // Send to backend
       const sentMessage = await sendAdminMessage(conversationId, messageText);
-      
+
       // Replace optimistic message with real one
-      setMessages((prev) => 
-        prev.map((m) => (m.id === tempMessage.id ? sentMessage : m))
-      );
-      
+      setMessages((prev) => prev.map((m) => (m.id === tempMessage.id ? sentMessage : m)));
+
       // Scroll to bottom
       setTimeout(scrollToBottom, 100);
-      
+
       // Focus textarea
       textareaRef.current?.focus();
-    } catch (err: any) {
-      toast.error(err.message ?? "Failed to send message");
-      
+    } catch (err: unknown) {
+      toast.error(errorMessage(err, "Failed to send message"));
+
       // Remove optimistic message on error
       setMessages((prev) => prev.filter((m) => !m.id.startsWith("temp-")));
     } finally {
@@ -186,10 +185,10 @@ export function ConversationDetail({
 
     if (diffMins < 1) return "Just now";
     if (diffMins < 60) return `${diffMins}m ago`;
-    
+
     const diffHours = Math.floor(diffMs / 3600000);
     if (diffHours < 24) return `${diffHours}h ago`;
-    
+
     return date.toLocaleString();
   };
 
@@ -211,10 +210,7 @@ export function ConversationDetail({
     );
   }
 
-  const customerName =
-    conversation.guest_name ||
-    conversation.guest_email ||
-    "Customer";
+  const customerName = conversation.guest_name || conversation.guest_email || "Customer";
 
   return (
     <div className="space-y-4">
@@ -228,17 +224,15 @@ export function ConversationDetail({
           >
             <ArrowLeft className="h-5 w-5" />
           </button>
-          
+
           <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
             <User className="h-5 w-5 text-primary" />
           </div>
-          
+
           <div className="flex-1 min-w-0">
             <h2 className="font-semibold text-lg truncate">{customerName}</h2>
             {conversation.guest_email && (
-              <p className="text-sm text-text-secondary truncate">
-                {conversation.guest_email}
-              </p>
+              <p className="text-sm text-text-secondary truncate">{conversation.guest_email}</p>
             )}
           </div>
         </div>
@@ -250,9 +244,7 @@ export function ConversationDetail({
           {/* Messages list */}
           <div className="flex-1 overflow-y-auto space-y-4 mb-4 pr-2">
             {messages.length === 0 ? (
-              <div className="text-center py-12 text-text-secondary">
-                No messages yet
-              </div>
+              <div className="text-center py-12 text-text-secondary">No messages yet</div>
             ) : (
               messages.map((msg) => (
                 <div
@@ -266,14 +258,10 @@ export function ConversationDetail({
                         : "bg-muted text-foreground"
                     }`}
                   >
-                    <p className="text-sm whitespace-pre-wrap break-words">
-                      {msg.message}
-                    </p>
+                    <p className="text-sm whitespace-pre-wrap break-words">{msg.message}</p>
                     <p
                       className={`text-xs mt-1 ${
-                        msg.is_admin
-                          ? "text-primary-foreground/70"
-                          : "text-text-secondary"
+                        msg.is_admin ? "text-primary-foreground/70" : "text-text-secondary"
                       }`}
                     >
                       {formatTime(msg.created_at)}

@@ -1,235 +1,249 @@
 import type { Request, Response, NextFunction } from "express";
+import { randomBytes } from "node:crypto";
 import { z } from "zod";
 import { supabaseAdmin } from "../config/supabase.js";
+import {
+  ConversationAccessError,
+  hashGuestConversationToken,
+  resolveConversationOwner,
+  type CustomerConversationContext,
+} from "../services/conversationAccess.service.js";
 
-// ─── Validation Schemas ────────────────────────────────────────────────────
-
-const getOrCreateConversationSchema = z.object({
-  customer_id: z.string().uuid().optional(),
-  guest_email: z.string().email().optional(),
-  guest_name: z.string().min(1).optional(),
-}).refine(
-  (data) => (data.customer_id && !data.guest_email && !data.guest_name) || 
-            (!data.customer_id && data.guest_email && data.guest_name),
-  { message: "Either customer_id or (guest_email + guest_name) must be provided" }
+const createConversationSchema = z.object({
+  guestName: z.string().trim().min(1).max(100).optional(),
+  guestEmail: z.string().trim().email().max(254).optional(),
+}).strict().refine(
+  (value) => (!value.guestName && !value.guestEmail) || Boolean(value.guestName && value.guestEmail),
+  { message: "Guest name and email must be provided together" },
 );
 
 const sendMessageSchema = z.object({
-  message: z.string().min(1).max(5000, "Message must be 5000 characters or less"),
-  sender_id: z.string().uuid().optional(),
-});
+  message: z.string().trim().min(1).max(5000),
+}).strict();
 
-// ─── GET or CREATE Conversation ────────────────────────────────────────────
-// POST /api/queries/conversations
-// Body: { customer_id?: uuid, guest_email?: string, guest_name?: string }
-export async function getOrCreateConversation(
-  req: Request,
-  res: Response,
-  next: NextFunction
-) {
+const conversationProjection =
+  "id, last_message_at, unread_by_customer, created_at, updated_at";
+const ownerProjection = "id, customer_id, guest_token_hash";
+
+function guestTokenFromRequest(req: Request): string | undefined {
+  const value = req.header("X-Guest-Conversation-Token");
+  return value && value.length <= 256 ? value : undefined;
+}
+
+async function customerIdForAuth(authId: string): Promise<string | null> {
+  const { data, error } = await supabaseAdmin
+    .from("customers")
+    .select("id")
+    .eq("auth_id", authId)
+    .maybeSingle();
+  if (error) throw error;
+  return data?.id ?? null;
+}
+
+function toOwnerContext(row: {
+  id: string;
+  customer_id: string | null;
+  guest_token_hash: string | null;
+} | null): CustomerConversationContext | null {
+  return row ? {
+    id: row.id,
+    customerId: row.customer_id,
+    guestTokenHash: row.guest_token_hash,
+  } : null;
+}
+
+async function authorizeConversation(req: Request): Promise<CustomerConversationContext> {
+  return resolveConversationOwner({
+    authId: req.user?.id,
+    role: req.user?.role,
+    guestToken: guestTokenFromRequest(req),
+  }, {
+    findCustomerIdByAuthId: customerIdForAuth,
+    findByCustomerId: async (customerId) => {
+      const { data, error } = await supabaseAdmin
+        .from("customer_conversations")
+        .select(ownerProjection)
+        .eq("customer_id", customerId)
+        .maybeSingle();
+      if (error) throw error;
+      return toOwnerContext(data);
+    },
+    findByGuestTokenHash: async (tokenHash) => {
+      const now = new Date().toISOString();
+      const { data, error } = await supabaseAdmin
+        .from("customer_conversations")
+        .select(ownerProjection)
+        .eq("guest_token_hash", tokenHash)
+        .is("guest_token_revoked_at", null)
+        .or(`guest_token_expires_at.is.null,guest_token_expires_at.gt.${now}`)
+        .maybeSingle();
+      if (error) throw error;
+      return toOwnerContext(data);
+    },
+  });
+}
+
+function handleAccessError(error: unknown, res: Response, next: NextFunction) {
+  if (error instanceof ConversationAccessError) {
+    return res.status(error.status).json({ error: error.message });
+  }
+  return next(error);
+}
+
+async function loadMinimalConversation(conversationId: string) {
+  const { data, error } = await supabaseAdmin
+    .from("customer_conversations")
+    .select(conversationProjection)
+    .eq("id", conversationId)
+    .single();
+  if (error) throw error;
+  return data;
+}
+
+// POST /api/queries/conversation
+export async function getOrCreateConversation(req: Request, res: Response, next: NextFunction) {
   try {
-    const parsed = getOrCreateConversationSchema.safeParse(req.body);
-    
+    const parsed = createConversationSchema.safeParse(req.body ?? {});
     if (!parsed.success) {
-      return res.status(400).json({ 
-        error: "Invalid request", 
-        details: parsed.error.errors 
-      });
+      return res.status(400).json({ error: "Invalid conversation request" });
     }
 
-    const { customer_id, guest_email, guest_name } = parsed.data;
+    if (req.user) {
+      if (req.user.role !== "customer") {
+        return res.status(403).json({ error: "Customer conversation access required" });
+      }
+      const customerId = await customerIdForAuth(req.user.id);
+      if (!customerId) return res.status(403).json({ error: "Customer profile not found" });
 
-    // Try to find existing conversation
-    let query = supabaseAdmin
-      .from("customer_conversations")
-      .select("*");
+      const { data: existing, error: findError } = await supabaseAdmin
+        .from("customer_conversations")
+        .select(conversationProjection)
+        .eq("customer_id", customerId)
+        .maybeSingle();
+      if (findError) throw findError;
+      if (existing) return res.json({ conversation: existing });
 
-    if (customer_id) {
-      query = query.eq("customer_id", customer_id);
-    } else if (guest_email) {
-      query = query.eq("guest_email", guest_email);
+      const { data, error } = await supabaseAdmin
+        .from("customer_conversations")
+        .insert({ customer_id: customerId })
+        .select(conversationProjection)
+        .single();
+      if (error) {
+        // A concurrent request may have won the unique customer insert.
+        if (error.code === "23505") {
+          const { data: raced, error: racedError } = await supabaseAdmin
+            .from("customer_conversations")
+            .select(conversationProjection)
+            .eq("customer_id", customerId)
+            .single();
+          if (racedError) throw racedError;
+          return res.json({ conversation: raced });
+        }
+        throw error;
+      }
+      return res.status(201).json({ conversation: data });
     }
 
-    const { data: existing, error: findError } = await query.maybeSingle();
-
-    if (findError && findError.code !== "PGRST116") {
-      throw findError;
+    if (guestTokenFromRequest(req)) {
+      const owner = await authorizeConversation(req);
+      return res.json({ conversation: await loadMinimalConversation(owner.id) });
     }
 
-    // If conversation exists, return it
-    if (existing) {
-      return res.json({ conversation: existing });
+    const { guestName, guestEmail } = parsed.data;
+    if (!guestName || !guestEmail) {
+      return res.status(400).json({ error: "Guest name and email are required" });
     }
 
-    // Create new conversation
-    const { data: newConversation, error: createError } = await supabaseAdmin
+    const guestToken = randomBytes(32).toString("base64url");
+    const expiresAt = new Date(Date.now() + 180 * 24 * 60 * 60 * 1000).toISOString();
+    const { data, error } = await supabaseAdmin
       .from("customer_conversations")
       .insert({
-        customer_id: customer_id || null,
-        guest_email: guest_email || null,
-        guest_name: guest_name || null,
+        customer_id: null,
+        guest_email: guestEmail.toLowerCase(),
+        guest_name: guestName,
+        guest_token_hash: hashGuestConversationToken(guestToken),
+        guest_token_expires_at: expiresAt,
       })
-      .select()
+      .select(conversationProjection)
       .single();
+    if (error) throw error;
 
-    if (createError) throw createError;
-
-    return res.status(201).json({ conversation: newConversation });
+    return res.status(201).json({ conversation: data, guestToken });
   } catch (error) {
-    next(error);
+    return handleAccessError(error, res, next);
   }
 }
 
-// ─── GET Messages for Conversation ─────────────────────────────────────────
-// GET /api/queries/conversations/:id/messages
-export async function getMessages(
-  req: Request,
-  res: Response,
-  next: NextFunction
-) {
+// GET /api/queries/conversation/messages
+export async function getMessages(req: Request, res: Response, next: NextFunction) {
   try {
-    const { id } = req.params;
-
-    if (!id) {
-      return res.status(400).json({ error: "Conversation ID is required" });
-    }
-
+    const owner = await authorizeConversation(req);
     const { data, error } = await supabaseAdmin
       .from("conversation_messages")
-      .select("*")
-      .eq("conversation_id", id)
+      .select("id, is_admin, message, created_at")
+      .eq("conversation_id", owner.id)
       .order("created_at", { ascending: true });
-
     if (error) throw error;
-
-    return res.json({ messages: data || [] });
+    return res.json({ messages: data ?? [] });
   } catch (error) {
-    next(error);
+    return handleAccessError(error, res, next);
   }
 }
 
-// ─── SEND Customer Message ─────────────────────────────────────────────────
-// POST /api/queries/conversations/:id/messages
-// Body: { message: string, sender_id?: uuid }
-export async function sendCustomerMessage(
-  req: Request,
-  res: Response,
-  next: NextFunction
-) {
+// POST /api/queries/conversation/messages
+export async function sendCustomerMessage(req: Request, res: Response, next: NextFunction) {
   try {
-    const { id } = req.params;
     const parsed = sendMessageSchema.safeParse(req.body);
-
-    if (!parsed.success) {
-      return res.status(400).json({ 
-        error: "Invalid message", 
-        details: parsed.error.errors 
-      });
-    }
-
-    const { message, sender_id } = parsed.data;
-
-    // Verify conversation exists
-    const { data: conversation, error: convError } = await supabaseAdmin
-      .from("customer_conversations")
-      .select("id")
-      .eq("id", id)
-      .maybeSingle();
-
-    if (convError) throw convError;
-    if (!conversation) {
-      return res.status(404).json({ error: "Conversation not found" });
-    }
-
-    // Insert message
-    const { data: newMessage, error: insertError } = await supabaseAdmin
-      .from("conversation_messages")
-      .insert({
-        conversation_id: id,
-        message: message.trim(),
-        is_admin: false,
-        sender_id: sender_id || null,
-      })
-      .select()
-      .single();
-
-    if (insertError) throw insertError;
-
-    return res.status(201).json({ message: newMessage });
-  } catch (error) {
-    next(error);
-  }
-}
-
-// ─── GET Unread Count (Fallback) ──────────────────────────────────────────
-// GET /api/queries/unread-count?customer_id=xxx OR ?guest_email=xxx
-// NOTE: This is a fallback; primary updates come via WebSocket
-export async function getUnreadCount(
-  req: Request,
-  res: Response,
-  next: NextFunction
-) {
-  try {
-    const { customer_id, guest_email } = req.query;
-
-    if (!customer_id && !guest_email) {
-      return res.status(400).json({ 
-        error: "Either customer_id or guest_email is required" 
-      });
-    }
-
-    let query = supabaseAdmin
-      .from("customer_conversations")
-      .select("unread_by_customer");
-
-    if (customer_id) {
-      query = query.eq("customer_id", customer_id as string);
-    } else if (guest_email) {
-      query = query.eq("guest_email", guest_email as string);
-    }
-
-    const { data, error } = await query.maybeSingle();
-
-    if (error && error.code !== "PGRST116") {
-      throw error;
-    }
-
-    const count = data?.unread_by_customer || 0;
-
-    return res.json({ count });
-  } catch (error) {
-    next(error);
-  }
-}
-
-// ─── MARK Conversation as Read (Customer) ─────────────────────────────────
-// PATCH /api/queries/conversations/:id/read
-export async function markAsReadByCustomer(
-  req: Request,
-  res: Response,
-  next: NextFunction
-) {
-  try {
-    const { id } = req.params;
-
-    if (!id) {
-      return res.status(400).json({ error: "Conversation ID is required" });
-    }
+    if (!parsed.success) return res.status(400).json({ error: "Invalid message" });
+    const owner = await authorizeConversation(req);
 
     const { data, error } = await supabaseAdmin
-      .from("customer_conversations")
-      .update({ 
-        unread_by_customer: 0,
-        updated_at: new Date().toISOString(),
+      .from("conversation_messages")
+      .insert({
+        conversation_id: owner.id,
+        message: parsed.data.message,
+        is_admin: false,
+        sender_id: req.user?.id ?? null,
       })
-      .eq("id", id)
-      .select()
+      .select("id, is_admin, message, created_at")
       .single();
-
     if (error) throw error;
+    return res.status(201).json({ message: data });
+  } catch (error) {
+    return handleAccessError(error, res, next);
+  }
+}
 
+// GET /api/queries/conversation/unread-count
+export async function getUnreadCount(req: Request, res: Response, next: NextFunction) {
+  try {
+    const owner = await authorizeConversation(req);
+    const { data, error } = await supabaseAdmin
+      .from("customer_conversations")
+      .select("unread_by_customer")
+      .eq("id", owner.id)
+      .single();
+    if (error) throw error;
+    return res.json({ count: data.unread_by_customer ?? 0 });
+  } catch (error) {
+    return handleAccessError(error, res, next);
+  }
+}
+
+// PATCH /api/queries/conversation/read
+export async function markAsReadByCustomer(req: Request, res: Response, next: NextFunction) {
+  try {
+    const owner = await authorizeConversation(req);
+    const { data, error } = await supabaseAdmin
+      .from("customer_conversations")
+      .update({ unread_by_customer: 0, updated_at: new Date().toISOString() })
+      .eq("id", owner.id)
+      .select(conversationProjection)
+      .single();
+    if (error) throw error;
     return res.json({ conversation: data });
   } catch (error) {
-    next(error);
+    return handleAccessError(error, res, next);
   }
 }

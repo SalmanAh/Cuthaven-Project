@@ -1,100 +1,67 @@
 import Stripe from "stripe";
 import { supabaseAdmin } from "./supabase.js";
 
-// ═══════════════════════════════════════════════════════════════════════════
-// Database-Only Stripe Instance — NO FALLBACKS
-// ═══════════════════════════════════════════════════════════════════════════
-// Payment gateway keys are ONLY stored in database (payment_gateways table).
-// If database fails or no active gateway exists, the system will fail.
-// This ensures consistency and prevents using outdated keys.
-// ═══════════════════════════════════════════════════════════════════════════
-
-let cachedStripeInstance: Stripe | null = null;
-let cachedGatewayId: string | null = null;
-
-/**
- * Returns a Stripe instance configured with the active gateway from the database.
- * THROWS ERROR if no active gateway exists - NO FALLBACKS.
- * Caches the instance to avoid repeated database queries.
- */
-export async function getStripeInstance(): Promise<Stripe> {
-  // Check if we have an active Stripe gateway in database
-  const { data: gateway, error } = await supabaseAdmin
-    .from("payment_gateways")
-    .select("id, stripe_secret_key")
-    .eq("gateway_type", "stripe")
-    .eq("is_active", true)
-    .maybeSingle();
-
-  if (error) {
-    console.error("[STRIPE] Database query failed:", error.message);
-    throw new Error(
-      `Failed to fetch Stripe gateway from database: ${error.message}. ` +
-      `Check database connection and payment_gateways table.`
-    );
-  }
-
-  if (!gateway) {
-    throw new Error(
-      "No active Stripe gateway found in database. " +
-      "Add a gateway at /admin/payment-gateways with is_active = true"
-    );
-  }
-
-  if (!gateway.stripe_secret_key) {
-    throw new Error(
-      `Active Stripe gateway (${gateway.id}) has no secret key. ` +
-      `Update the gateway at /admin/payment-gateways`
-    );
-  }
-
-  // If gateway found and cached instance matches, return cached
-  if (cachedGatewayId === gateway.id && cachedStripeInstance) {
-    return cachedStripeInstance;
-  }
-
-  // Create new instance from database
-  console.log(`[STRIPE] Using gateway from database: ${gateway.id}`);
-  cachedStripeInstance = new Stripe(gateway.stripe_secret_key, {
-    apiVersion: "2025-02-24.acacia",
-  });
-  cachedGatewayId = gateway.id;
-  
-  return cachedStripeInstance;
+interface StripeGateway {
+  gatewayId: string;
+  stripe: Stripe;
+  webhookSecret: string | null;
 }
 
-/**
- * Returns the webhook verification configuration for the active Stripe gateway.
- * THROWS ERROR if no active gateway exists - NO FALLBACKS.
- */
-export async function getStripeWebhookConfig(): Promise<{ gatewayId: string; secret: string }> {
-  const { data: gateway, error } = await supabaseAdmin
+function stripeClient(secretKey: string): Stripe {
+  return new Stripe(secretKey, { apiVersion: "2025-02-24.acacia" });
+}
+
+/** Uses the active gateway for new checkouts or an order-bound gateway by ID. */
+export async function getStripeGateway(gatewayId?: string): Promise<StripeGateway> {
+  let query = supabaseAdmin
     .from("payment_gateways")
-    .select("id, stripe_webhook_secret")
-    .eq("gateway_type", "stripe")
-    .eq("is_active", true)
-    .maybeSingle();
+    .select("id, stripe_secret_key, stripe_webhook_secret")
+    .eq("gateway_type", "stripe");
+  query = gatewayId ? query.eq("id", gatewayId) : query.eq("is_active", true);
+  const { data: gateway, error } = await query.maybeSingle();
 
   if (error) {
-    console.error("[STRIPE] Database query failed:", error.message);
-    throw new Error(
-      `Failed to fetch Stripe webhook secret from database: ${error.message}`
-    );
+    throw new Error(`Failed to fetch Stripe gateway: ${error.message}`);
   }
-
   if (!gateway) {
     throw new Error(
-      "No active Stripe gateway found in database. " +
-      "Add a gateway at /admin/payment-gateways"
+      gatewayId ? `Stripe gateway ${gatewayId} was not found` : "No active Stripe gateway found",
     );
   }
-
-  if (!gateway.stripe_webhook_secret) {
-    throw new Error(
-      "Active Stripe gateway has no webhook secret. " +
-      "Update the gateway at /admin/payment-gateways"
-    );
+  if (!gateway.stripe_secret_key) {
+    throw new Error(`Stripe gateway ${gateway.id} has no secret key`);
   }
 
-  return { gatewayId: gateway.id, secret: gateway.stripe_webhook_secret };
+  return {
+    gatewayId: gateway.id,
+    stripe: stripeClient(gateway.stripe_secret_key),
+    webhookSecret: gateway.stripe_webhook_secret,
+  };
+}
+
+export async function getStripeInstance(gatewayId?: string): Promise<Stripe> {
+  return (await getStripeGateway(gatewayId)).stripe;
+}
+
+/** Old accounts must continue verifying delayed events after gateway rotation. */
+export async function getStripeWebhookConfigs(): Promise<StripeGateway[]> {
+  const { data: gateways, error } = await supabaseAdmin
+    .from("payment_gateways")
+    .select("id, stripe_secret_key, stripe_webhook_secret")
+    .eq("gateway_type", "stripe")
+    .not("stripe_secret_key", "is", null)
+    .not("stripe_webhook_secret", "is", null);
+
+  if (error) {
+    throw new Error(`Failed to fetch Stripe webhook configurations: ${error.message}`);
+  }
+  if (!gateways?.length) {
+    throw new Error("No Stripe webhook configuration found");
+  }
+
+  return gateways.map((gateway) => ({
+    gatewayId: gateway.id,
+    stripe: stripeClient(gateway.stripe_secret_key!),
+    webhookSecret: gateway.stripe_webhook_secret!,
+  }));
 }

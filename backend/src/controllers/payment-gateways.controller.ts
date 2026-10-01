@@ -8,44 +8,44 @@ import { z } from "zod";
 import { supabaseAdmin } from "../config/supabase.js";
 import type {
   PaymentGatewayRow,
-  PaymentGatewayResponse,
   CreatePaymentGatewayRequest,
   ActiveGatewayConfig,
 } from "../types/payment-gateway.js";
+import { toPaymentGatewayResponse } from "../services/paymentGateway.service.js";
 
-// ─── Helper: Mask sensitive keys for API responses ─────────────────────────
-
-function maskKey(key: string | null): string | undefined {
-  if (!key) return undefined;
-  if (key.length <= 8) return "***";
-  return `${key.slice(0, 8)}...${key.slice(-4)}`;
+async function staffIdForAuth(authId: string | undefined): Promise<string | null> {
+  if (!authId) return null;
+  const { data, error } = await supabaseAdmin
+    .from("staff")
+    .select("id")
+    .eq("auth_id", authId)
+    .maybeSingle();
+  if (error) throw error;
+  return data?.id ?? null;
 }
 
-function rowToResponse(row: PaymentGatewayRow): PaymentGatewayResponse {
-  const base = {
-    id: row.id,
-    gatewayType: row.gateway_type,
-    accountName: row.account_name,
-    isActive: row.is_active,
-    createdAt: row.created_at,
-    updatedAt: row.updated_at,
-  };
+async function auditGatewayChange(
+  gatewayId: string,
+  actorId: string | null,
+  action: "created" | "updated" | "deleted",
+) {
+  const { error } = await supabaseAdmin.from("payment_gateway_audit").insert({
+    gateway_id: gatewayId,
+    actor_staff_id: actorId,
+    action,
+  });
+  if (error) throw error;
+}
 
-  if (row.gateway_type === "stripe") {
-    return {
-      ...base,
-      stripeSecretKey: maskKey(row.stripe_secret_key),
-      stripePublishableKey: maskKey(row.stripe_publishable_key),
-      stripeWebhookSecret: maskKey(row.stripe_webhook_secret),
-    };
-  } else {
-    return {
-      ...base,
-      paypalClientId: maskKey(row.paypal_client_id),
-      paypalClientSecret: maskKey(row.paypal_client_secret),
-      paypalMode: row.paypal_mode ?? undefined,
-    };
-  }
+async function activateGateway(id: string, actorId: string | null): Promise<PaymentGatewayRow> {
+  const { data, error } = await supabaseAdmin.rpc("activate_payment_gateway", {
+    p_id: id,
+    p_actor_id: actorId,
+  });
+  if (error) throw error;
+  const gateway = (data as PaymentGatewayRow[] | null)?.[0];
+  if (!gateway) throw new Error("Gateway not found");
+  return gateway;
 }
 
 // ─── GET /api/admin/payment-gateways ────────────────────────────────────────
@@ -61,7 +61,7 @@ export async function listPaymentGateways(req: Request, res: Response, next: Nex
 
     if (error) throw error;
 
-    const response = (gateways ?? []).map((g: PaymentGatewayRow) => rowToResponse(g));
+    const response = (gateways ?? []).map((g: PaymentGatewayRow) => toPaymentGatewayResponse(g));
 
     return res.json(response);
   } catch (err) {
@@ -70,7 +70,7 @@ export async function listPaymentGateways(req: Request, res: Response, next: Nex
 }
 
 // ─── GET /api/admin/payment-gateways/:id ────────────────────────────────────
-// Get single gateway with FULL unmasked keys (for edit form)
+// Get single gateway with masked credential hints only.
 
 export async function getPaymentGateway(req: Request, res: Response, next: NextFunction) {
   try {
@@ -85,28 +85,7 @@ export async function getPaymentGateway(req: Request, res: Response, next: NextF
     if (error) throw error;
     if (!gateway) return res.status(404).json({ error: "Gateway not found" });
 
-    // Return FULL keys for edit form (admin only endpoint)
-    const row = gateway as PaymentGatewayRow;
-    const response: any = {
-      id: row.id,
-      gatewayType: row.gateway_type,
-      accountName: row.account_name,
-      isActive: row.is_active,
-      createdAt: row.created_at,
-      updatedAt: row.updated_at,
-    };
-
-    if (row.gateway_type === "stripe") {
-      response.stripeSecretKey = row.stripe_secret_key;
-      response.stripePublishableKey = row.stripe_publishable_key;
-      response.stripeWebhookSecret = row.stripe_webhook_secret;
-    } else {
-      response.paypalClientId = row.paypal_client_id;
-      response.paypalClientSecret = row.paypal_client_secret;
-      response.paypalMode = row.paypal_mode;
-    }
-
-    return res.json(response);
+    return res.json(toPaymentGatewayResponse(gateway as PaymentGatewayRow));
   } catch (err) {
     next(err);
   }
@@ -143,21 +122,13 @@ export async function createPaymentGateway(req: Request, res: Response, next: Ne
     const body = parsed.data as CreatePaymentGatewayRequest;
 
     // Get staff ID for created_by
-    let createdBy: string | null = null;
-    if (req.user) {
-      const { data: staff } = await supabaseAdmin
-        .from("staff")
-        .select("id")
-        .eq("auth_id", req.user.id)
-        .maybeSingle();
-      createdBy = staff?.id ?? null;
-    }
+    const createdBy = await staffIdForAuth(req.user?.id);
 
     // Build insert object
     const insertData: any = {
       gateway_type: body.gatewayType,
       account_name: body.accountName,
-      is_active: body.isActive ?? false,
+      is_active: false,
       created_by: createdBy,
     };
 
@@ -187,7 +158,9 @@ export async function createPaymentGateway(req: Request, res: Response, next: Ne
       throw error;
     }
 
-    return res.status(201).json(rowToResponse(gateway as PaymentGatewayRow));
+    await auditGatewayChange(gateway.id, createdBy, "created");
+    const result = body.isActive ? await activateGateway(gateway.id, createdBy) : gateway;
+    return res.status(201).json(toPaymentGatewayResponse(result as PaymentGatewayRow));
   } catch (err) {
     next(err);
   }
@@ -242,7 +215,7 @@ export async function updatePaymentGateway(req: Request, res: Response, next: Ne
     // Build update object (only fields that were provided)
     const updateData: any = {};
     if (body.accountName !== undefined) updateData.account_name = body.accountName;
-    if (body.isActive !== undefined) updateData.is_active = body.isActive;
+    if (body.isActive === false) updateData.is_active = false;
 
     if (gatewayType === "stripe") {
       if (body.stripeSecretKey) updateData.stripe_secret_key = body.stripeSecretKey;
@@ -263,7 +236,10 @@ export async function updatePaymentGateway(req: Request, res: Response, next: Ne
 
     if (error) throw error;
 
-    return res.json(rowToResponse(updated as PaymentGatewayRow));
+    const actorId = await staffIdForAuth(req.user?.id);
+    await auditGatewayChange(id, actorId, "updated");
+    const result = body.isActive ? await activateGateway(id, actorId) : updated;
+    return res.json(toPaymentGatewayResponse(result as PaymentGatewayRow));
   } catch (err) {
     next(err);
   }
@@ -276,21 +252,8 @@ export async function activatePaymentGateway(req: Request, res: Response, next: 
   try {
     const { id } = req.params;
 
-    const { data: gateway, error } = await supabaseAdmin
-      .from("payment_gateways")
-      .update({ is_active: true })
-      .eq("id", id)
-      .select("*")
-      .single();
-
-    if (error) {
-      if (error.code === "PGRST116") {
-        return res.status(404).json({ error: "Gateway not found" });
-      }
-      throw error;
-    }
-
-    return res.json(rowToResponse(gateway as PaymentGatewayRow));
+    const gateway = await activateGateway(id, await staffIdForAuth(req.user?.id));
+    return res.json(toPaymentGatewayResponse(gateway));
   } catch (err) {
     next(err);
   }
@@ -313,20 +276,10 @@ export async function deletePaymentGateway(req: Request, res: Response, next: Ne
     if (fetchError) throw fetchError;
     if (!gateway) return res.status(404).json({ error: "Gateway not found" });
 
-    // If active, check if there's another one of the same type
     if (gateway.is_active) {
-      const { data: alternatives } = await supabaseAdmin
-        .from("payment_gateways")
-        .select("id")
-        .eq("gateway_type", gateway.gateway_type)
-        .neq("id", id)
-        .limit(1);
-
-      if (!alternatives || alternatives.length === 0) {
-        return res.status(400).json({
-          error: `Cannot delete the only ${gateway.gateway_type} gateway. Add another one first, activate it, then delete this one.`,
-        });
-      }
+      return res.status(400).json({
+        error: `Cannot delete an active ${gateway.gateway_type} gateway. Activate another one first.`,
+      });
     }
 
     const { error: deleteError } = await supabaseAdmin
@@ -335,6 +288,8 @@ export async function deletePaymentGateway(req: Request, res: Response, next: Ne
       .eq("id", id);
 
     if (deleteError) throw deleteError;
+
+    await auditGatewayChange(id, await staffIdForAuth(req.user?.id), "deleted");
 
     return res.json({ success: true, message: "Gateway deleted" });
   } catch (err) {
@@ -377,18 +332,19 @@ export async function getActiveGatewaysForCheckout(req: Request, res: Response, 
   }
 }
 
-// ─── Internal helper: Get active gateway config (for backend use) ───────────
-// Used by checkout controller to get secret keys
+// ─── Internal helper: Get active or order-bound gateway config ─────────────
+// New checkouts omit gatewayId; existing orders always provide it.
 
-export async function getActiveGatewayConfig(
-  type: "stripe" | "paypal"
+export async function getGatewayConfig(
+  type: "stripe" | "paypal",
+  gatewayId?: string,
 ): Promise<ActiveGatewayConfig | null> {
-  const { data: gateway, error } = await supabaseAdmin
+  let query = supabaseAdmin
     .from("payment_gateways")
     .select("*")
-    .eq("gateway_type", type)
-    .eq("is_active", true)
-    .maybeSingle();
+    .eq("gateway_type", type);
+  query = gatewayId ? query.eq("id", gatewayId) : query.eq("is_active", true);
+  const { data: gateway, error } = await query.maybeSingle();
 
   if (error || !gateway) return null;
 
@@ -400,6 +356,7 @@ export async function getActiveGatewayConfig(
     }
     return {
       type: "stripe",
+      gatewayId: row.id,
       secretKey: row.stripe_secret_key,
       publishableKey: row.stripe_publishable_key,
       webhookSecret: row.stripe_webhook_secret,
@@ -410,6 +367,7 @@ export async function getActiveGatewayConfig(
     }
     return {
       type: "paypal",
+      gatewayId: row.id,
       clientId: row.paypal_client_id,
       clientSecret: row.paypal_client_secret,
       mode: row.paypal_mode,

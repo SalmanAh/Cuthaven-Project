@@ -15,12 +15,18 @@ import {
 
 const router = Router();
 
+router.use((_req, res, next) => {
+  res.set("Cache-Control", "private, no-store");
+  res.set("Pragma", "no-cache");
+  next();
+});
+
 // ─── Admin-only routes ─────────────────────────────────────────────────────
 
 // List all payment gateways
 router.get("/", requireAuth, requireRole("admin"), listPaymentGateways);
 
-// Get single gateway (with full unmasked keys for edit form)
+// Get single gateway with masked credential hints.
 router.get("/:id", requireAuth, requireRole("admin"), getPaymentGateway);
 
 // Create new gateway
