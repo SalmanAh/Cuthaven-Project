@@ -36,5 +36,12 @@ export default tseslint.config(
       "@typescript-eslint/no-unused-vars": "off",
     },
   },
+  {
+    files: ["src/components/ui/**/*.{ts,tsx}", "src/context/**/*.{ts,tsx}", "src/lib/lazyLoad.tsx"],
+    rules: {
+      // These modules intentionally colocate components with hooks or style helpers.
+      "react-refresh/only-export-components": "off",
+    },
+  },
   eslintPluginPrettier,
 );

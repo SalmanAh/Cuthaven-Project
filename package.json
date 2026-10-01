@@ -3,8 +3,8 @@
   "private": true,
   "version": "0.1.0",
   "scripts": {
-    "dev": "concurrently -n frontend,backend -c green,cyan \"cd frontend && bun dev\" \"cd backend && npm run dev\"",
-    "install:all": "cd frontend && bun install && cd ../backend && npm install"
+    "dev": "concurrently -n frontend,backend -c green,cyan \"npm --prefix frontend run dev\" \"npm --prefix backend run dev\"",
+    "install:all": "npm --prefix frontend ci && npm --prefix backend ci"
   },
   "devDependencies": {
     "concurrently": "^9.1.0"
